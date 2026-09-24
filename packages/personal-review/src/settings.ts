@@ -13,7 +13,7 @@
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import {
-  assertReviewerTable, MAX_REVIEWERS,
+  MAX_REVIEWERS,
   type ReviewSettings, type ReviewerSettingsRow,
 } from './reviewers.ts'
 
@@ -33,18 +33,17 @@ const reviewerRow = z.object({
 
 /**
  * Reviewer table: 0–5 rows, where empty provider+model rows are unused slots.
- * The transform runs the cross-field checks the row schema cannot express
- * (incomplete rows, duplicate reviewers, duplicate roles), so a settings write
- * that breaks them is refused by the Host's Config validation. The stored
- * value is the table as written; the transform only rejects.
+ *
+ * Only serializable constraints live here. The Host sends this schema to the
+ * browser as JSON, and the settings form rehydrates and validates the stored
+ * value with it before showing anything; a `transform` arrives there without
+ * its callback, every validation throws, and the form stays "loading" forever.
+ * So the cross-field checks the row schema cannot express (incomplete rows,
+ * duplicate reviewers, duplicate roles) run where the table is written — the
+ * settings page refuses before saving — and where it is used —
+ * `review_debate` refuses a bad table through `requireConfiguredReviewers`.
  */
-export const ReviewerTableSchema = z.transform(
-  z.array(reviewerRow).max(MAX_REVIEWERS),
-  (rows) => {
-    assertReviewerTable(rows as ReviewerSettingsRow[])
-    return rows
-  },
-).default([])
+export const ReviewerTableSchema = z.array(reviewerRow).max(MAX_REVIEWERS).default([])
 
 /**
  * Config fields of the `personal-settings` Host row, both editable live.
