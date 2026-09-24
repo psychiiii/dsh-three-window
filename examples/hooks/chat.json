@@ -1,0 +1,80 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json,sys,os,datetime;p=json.load(sys.stdin);open(os.environ.get(\"DSH_HOOK_TRACE\") or os.path.join(os.environ.get(\"CLAUDE_PROJECT_DIR\",\".\"),\".dsh\",\"hook-trace.log\"),\"a\").write(\"%s chat SessionStart session=%s source=%s\\n\" % (datetime.datetime.now().isoformat(timespec=\"seconds\"), p.get(\"session_id\",\"?\"), p.get(\"source\",\"?\")))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json;print(json.dumps({\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"聊天窗口径：先把问题与约束澄清，可以读代码查资料，但不要在聊天窗改仓库文件；需要动手时把方案整理清楚，交给施工窗执行。\"}}))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "edit|write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json;print(json.dumps({\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"聊天窗不改仓库文件。把要改的地方写清楚交给施工窗；这里可以读、可以查、可以把方案谈定。\"}}))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json,sys,os,datetime;p=json.load(sys.stdin);open(os.environ.get(\"DSH_HOOK_TRACE\") or os.path.join(os.environ.get(\"CLAUDE_PROJECT_DIR\",\".\"),\".dsh\",\"hook-trace.log\"),\"a\").write(\"%s chat PostToolUse %s\\n\" % (datetime.datetime.now().isoformat(timespec=\"seconds\"), p.get(\"tool_name\")))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'test -f \"$CLAUDE_PROJECT_DIR/.dsh/hooks/continue\" || exit 0; rm -f \"$CLAUDE_PROJECT_DIR/.dsh/hooks/continue\"; echo \"结论还没成形：把讨论收敛成可执行的方案，或说清还缺什么。\" >&2; exit 2'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "SubagentStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'printf \"%s chat SubagentStart\\n\" \"$(date -Is)\" >> \"${DSH_HOOK_TRACE:-$CLAUDE_PROJECT_DIR/.dsh/hook-trace.log}\"'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "SubagentStop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'printf \"%s chat SubagentStop\\n\" \"$(date -Is)\" >> \"${DSH_HOOK_TRACE:-$CLAUDE_PROJECT_DIR/.dsh/hook-trace.log}\"'",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}

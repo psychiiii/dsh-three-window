@@ -1,0 +1,80 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'printf \"%s construct SessionStart branch=%s head=%s payload=%s\\n\" \"$(date -Is)\" \"$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo -)\" \"$(git rev-parse --short HEAD 2>/dev/null || echo -)\" \"$(python3 -c \"import json,sys;print(json.dumps(json.load(sys.stdin)))\")\" >> \"${DSH_HOOK_TRACE:-$CLAUDE_PROJECT_DIR/.dsh/hook-trace.log}\"'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json;print(json.dumps({\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"施工窗口径：改动小步走、每步可回滚；只改与本任务相关的文件，不要顺手重构；收尾时说清改了什么、怎么验证。\"}}))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json,sys,os,datetime;p=json.load(sys.stdin);c=(p.get(\"tool_input\") or {}).get(\"command\") or \"\";open(os.environ.get(\"DSH_HOOK_TRACE\") or os.path.join(os.environ.get(\"CLAUDE_PROJECT_DIR\",\".\"),\".dsh\",\"hook-trace.log\"),\"a\").write(\"%s construct PreToolUse %s\\n\" % (datetime.datetime.now().isoformat(timespec=\"seconds\"), \" \".join(str(c).split())[:200]))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json,sys,os,datetime,re;p=json.load(sys.stdin);name=p.get(\"tool_name\");resp=str(p.get(\"tool_response\") or \"\");bad=bool(re.search(r\"exit code\\D{0,3}[1-9]|\\\\bfailed\\\\b|\\\\berror\\\\b|not found|no such file\", resp, re.I));open(os.environ.get(\"DSH_HOOK_TRACE\") or os.path.join(os.environ.get(\"CLAUDE_PROJECT_DIR\",\".\"),\".dsh\",\"hook-trace.log\"),\"a\").write(\"%s construct PostToolUse %s %s\\n\" % (datetime.datetime.now().isoformat(timespec=\"seconds\"), name, \"failed?\" if bad else \"ok\"));print(json.dumps({\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"上一步看起来失败了：先读错误再决定下一步，不要在没弄清原因前继续叠加改动。\"}})) if bad else None'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'test -f \"$CLAUDE_PROJECT_DIR/.dsh/hooks/continue\" || exit 0; rm -f \"$CLAUDE_PROJECT_DIR/.dsh/hooks/continue\"; echo \"还有一步没做完：把它做完，或明确说明为什么停在这里。\" >&2; exit 2'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "SubagentStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'printf \"%s construct SubagentStart\\n\" \"$(date -Is)\" >> \"${DSH_HOOK_TRACE:-$CLAUDE_PROJECT_DIR/.dsh/hook-trace.log}\"'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "SubagentStop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'printf \"%s construct SubagentStop\\n\" \"$(date -Is)\" >> \"${DSH_HOOK_TRACE:-$CLAUDE_PROJECT_DIR/.dsh/hook-trace.log}\"'",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}

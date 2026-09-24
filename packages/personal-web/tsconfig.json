@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "declaration": true,
+    "sourceMap": true,
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable",
+      "ESNext.Disposable"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src"
+  ]
+}

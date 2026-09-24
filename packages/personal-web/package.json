@@ -1,0 +1,114 @@
+{
+  "name": "@psychiiii/dsh-three-window",
+  "description": "Three-window overlay for dsh web: chat, construct, and review windows, each with an official permission preset and its own hooks.",
+  "version": "0.1.6-alpha.2",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./workbench": {
+      "types": "./lib/types/workbench.d.ts",
+      "default": "./lib/workbench.js"
+    },
+    "./sidebar": {
+      "types": "./lib/types/sidebar.d.ts",
+      "default": "./lib/sidebar.js"
+    },
+    "./workspace": {
+      "types": "./lib/types/workspace.d.ts",
+      "default": "./lib/workspace.js"
+    },
+    "./hooks": {
+      "types": "./lib/types/hooks.d.ts",
+      "default": "./lib/hooks.js"
+    },
+    "./settings": {
+      "types": "./lib/types/settings.d.ts",
+      "default": "./lib/settings.js"
+    },
+    "./review": {
+      "types": "./lib/types/review.d.ts",
+      "default": "./lib/review.js"
+    },
+    "./tool-deny": {
+      "types": "./lib/types/tool-deny.d.ts",
+      "default": "./lib/tool-deny.js"
+    },
+    "./permission-lock": {
+      "types": "./lib/types/permission-lock.d.ts",
+      "default": "./lib/permission-lock.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**",
+    "src/**",
+    "presets/**",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml",
+        "./presets/personal-construct.patch.yml",
+        "./presets/personal-chat.patch.yml",
+        "./presets/personal-review.patch.yml"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-gateway",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-api-workspace-files",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-agent-preset-registry": "*",
+    "@deepseek-ai/dsh-commands": "*",
+    "@deepseek-ai/dsh-permission-presets": "*",
+    "@deepseek-ai/dsh-sandbox-policy": "*",
+    "@deepseek-ai/dsh-scope": "*",
+    "@deepseek-ai/dsh-session": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis-plugin-include": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-system-prompt": "*",
+    "@psychiiii/dsh-three-window-hooks": "file:../personal-hooks",
+    "@psychiiii/dsh-three-window-review": "file:../personal-review",
+    "@psychiiii/dsh-three-window-settings": "file:../personal-settings",
+    "@psychiiii/dsh-three-window-sidebar": "file:../client-ui-sidebar",
+    "@psychiiii/dsh-three-window-workbench": "file:../client-ui-workbench",
+    "@psychiiii/dsh-three-window-workspace": "file:../client-ui-workspace",
+    "vitest": "*"
+  }
+}

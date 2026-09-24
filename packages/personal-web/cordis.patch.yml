@@ -1,0 +1,55 @@
+# Three-window overlay over dsh-web-app. The three window presets are the
+# presets/*.patch.yml files listed after this one in `dsh.bundle.patch`.
+# Permission defaults are official preset names; the composer access-mode chip
+# stays the official switch.
+
+- insert:
+    # One insert row. The group keeps each child's id, so a user patch can
+    # still target `ui-workbench`, `ui-sidebar-windowed`,
+    # `ui-workspace-windowed`, `personal-hooks`, or `personal-settings` by id.
+    # The package-root row `dsh-three-window` is the one the Web client
+    # composition serves the browser half for; the subpath rows are Host halves.
+    - id: dsh-three-window
+      name: cordis:group
+      group: true
+      config:
+        - id: ui-workbench
+          name: '@psychiiii/dsh-three-window/workbench'
+          config:
+            reuse: recent-matching-preset
+            windows:
+              - agentPreset: personal-chat
+                permission: read-only
+              - agentPreset: personal-construct
+                permission: workspace-write
+              - agentPreset: personal-review
+                permission: read-only
+        # Official include patches treat `name` as a match check, not a rename.
+        # Disable the official rows and insert the overlay rows.
+        - id: ui-sidebar-windowed
+          name: '@psychiiii/dsh-three-window/sidebar'
+        - id: ui-workspace-windowed
+          name: '@psychiiii/dsh-three-window/workspace'
+        - id: personal-hooks
+          name: '@psychiiii/dsh-three-window/hooks'
+        # `personal-review` is an agent-plane row on the review preset, which
+        # keeps `review_debate` out of the chat and construct catalogs.
+        - id: personal-settings
+          name: '@psychiiii/dsh-three-window/settings'
+        - id: dsh-three-window-client
+          name: '@psychiiii/dsh-three-window'
+
+- id: ui-sidebar
+  name: '@deepseek-ai/dsh-client-ui-sidebar'
+  disabled: true
+
+- id: ui-workspace
+  name: '@deepseek-ai/dsh-client-ui-workspace'
+  disabled: true
+
+# The preset selection registry: new Sessions default to the construct window.
+# The three window presets are `@deepseek-ai/dsh-agent-preset` rows in
+# presets/*.patch.yml, listed after this file in `dsh.bundle.patch`.
+- id: agent-preset-registry
+  config:
+    default: personal-construct

@@ -1,0 +1,123 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 4px 0 24px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.heading {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.note {
+  color: var(--dsw-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.warn {
+  color: var(--dsw-text-danger, #c0392b);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.select,
+.text {
+  background: var(--dsw-surface-2, transparent);
+  border: 1px solid var(--dsw-border);
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  padding: 4px 8px;
+  min-width: 220px;
+}
+
+.window {
+  border: 1px solid var(--dsw-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.windowTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hook {
+  border-left: 2px solid var(--dsw-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+}
+
+.command {
+  background: var(--dsw-surface-2, rgb(0 0 0 / 6%));
+  border-radius: 4px;
+  display: block;
+  font-family: var(--dsw-font-mono, monospace);
+  font-size: 11px;
+  overflow-x: auto;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.raw {
+  background: var(--dsw-surface-2, rgb(0 0 0 / 6%));
+  border-radius: 4px;
+  font-family: var(--dsw-font-mono, monospace);
+  font-size: 11px;
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.textarea {
+  background: var(--dsw-surface-2, transparent);
+  border: 1px solid var(--dsw-border);
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  line-height: 1.6;
+  min-height: 140px;
+  padding: 8px;
+  resize: vertical;
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}

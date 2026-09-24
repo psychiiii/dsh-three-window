@@ -1,0 +1,21 @@
+# Build outputs. Every package emits `lib/` from `tsc` (declarations) and
+# `tsdown` (runtime bundles); both are reproducible from `src/`.
+packages/*/lib/
+*.tsbuildinfo
+
+# Dependencies: symlinks into the harness checkout `.harness` names, recreated by
+# `link-workspace-packages.py`. `.harness` itself is a per-machine pointer (set
+# with `--checkout`), and `.harness-previous` records the one it replaced.
+node_modules/
+.harness
+.harness-previous
+
+# Vite/Vitest transform caches.
+.vite/
+**/.vite/
+
+# Distributable assembly and pack outputs from scripts/build-package.mjs.
+dist/
+out/
+
+__pycache__/

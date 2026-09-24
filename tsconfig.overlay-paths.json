@@ -1,0 +1,92 @@
+{
+  "//": "Source-plane map for the overlay's OWN packages. The checkout's `tsconfig.base.json` names only `@deepseek-ai/dsh-*` packages that live in the checkout, so without this map a cross-package import between two packages here falls through to node_modules -> the package's `exports` -> its built `lib/`. `overlay-client-bundle.ts` resolves those imports to source through it. Keep one entry per declared `exports` subpath of every package here, and keep `packages/*/package.json` and this file in step.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@psychiiii/dsh-three-window": [
+        "./packages/personal-web/src/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-hooks": [
+        "./packages/personal-hooks/src/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-hooks/config": [
+        "./packages/personal-hooks/src/config.ts"
+      ],
+      "@psychiiii/dsh-three-window-hooks/events": [
+        "./packages/personal-hooks/src/events.ts"
+      ],
+      "@psychiiii/dsh-three-window-hooks/windows": [
+        "./packages/personal-hooks/src/windows.ts"
+      ],
+      "@psychiiii/dsh-three-window-review": [
+        "./packages/personal-review/src/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/prompts": [
+        "./packages/personal-review/src/prompts.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/resolve": [
+        "./packages/personal-review/src/resolve.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/reviewers": [
+        "./packages/personal-review/src/reviewers.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/settings": [
+        "./packages/personal-review/src/settings.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/types": [
+        "./packages/personal-review/src/types.ts"
+      ],
+      "@psychiiii/dsh-three-window-settings": [
+        "./packages/personal-settings/src/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-settings/client": [
+        "./packages/personal-settings/src/client/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-sidebar": [
+        "./packages/client-ui-sidebar/src/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-sidebar/client": [
+        "./packages/client-ui-sidebar/src/client/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-workbench": [
+        "./packages/client-ui-workbench/src/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-workbench/client": [
+        "./packages/client-ui-workbench/src/client/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-workspace": [
+        "./packages/client-ui-workspace/src/index.ts"
+      ],
+      "@psychiiii/dsh-three-window-workspace/client": [
+        "./packages/client-ui-workspace/src/client/index.ts"
+      ],
+      "@psychiiii/dsh-three-window/client": [
+        "./packages/personal-web/src/client/index.ts"
+      ],
+      "@psychiiii/dsh-three-window/hooks": [
+        "./packages/personal-web/src/hooks.ts"
+      ],
+      "@psychiiii/dsh-three-window/permission-lock": [
+        "./packages/personal-web/src/permission-lock.ts"
+      ],
+      "@psychiiii/dsh-three-window/review": [
+        "./packages/personal-web/src/review.ts"
+      ],
+      "@psychiiii/dsh-three-window/settings": [
+        "./packages/personal-web/src/settings.ts"
+      ],
+      "@psychiiii/dsh-three-window/sidebar": [
+        "./packages/personal-web/src/sidebar.ts"
+      ],
+      "@psychiiii/dsh-three-window/tool-deny": [
+        "./packages/personal-web/src/tool-deny.ts"
+      ],
+      "@psychiiii/dsh-three-window/workbench": [
+        "./packages/personal-web/src/workbench.ts"
+      ],
+      "@psychiiii/dsh-three-window/workspace": [
+        "./packages/personal-web/src/workspace.ts"
+      ]
+    }
+  }
+}

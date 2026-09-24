@@ -1,0 +1,80 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json,sys,os,datetime;p=json.load(sys.stdin);open(os.environ.get(\"DSH_HOOK_TRACE\") or os.path.join(os.environ.get(\"CLAUDE_PROJECT_DIR\",\".\"),\".dsh\",\"hook-trace.log\"),\"a\").write(\"%s review SessionStart session=%s source=%s\\n\" % (datetime.datetime.now().isoformat(timespec=\"seconds\"), p.get(\"session_id\",\"?\"), p.get(\"source\",\"?\")))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json;print(json.dumps({\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"审核窗口径：每条结论都要带证据（文件:行、命令与输出）；没有证据的写成疑问而不是结论；不要复述代码，只说哪里有问题、为什么、怎么改。\"}}))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "edit|write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json;print(json.dumps({\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"审核窗只读：把修改意见写进结论，不要改仓库。这一层与产品自带的只读锁互为双保险。\"}}))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 -c 'import json,sys,os,datetime;p=json.load(sys.stdin);t=p.get(\"tool_input\") or {};tgt=t.get(\"path\") or t.get(\"file_path\") or t.get(\"pattern\") or t.get(\"command\") or \"\";open(os.environ.get(\"DSH_HOOK_TRACE\") or os.path.join(os.environ.get(\"CLAUDE_PROJECT_DIR\",\".\"),\".dsh\",\"hook-trace.log\"),\"a\").write(\"%s review read %s %s\\n\" % (datetime.datetime.now().isoformat(timespec=\"seconds\"), p.get(\"tool_name\"), str(tgt)[:160]))'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'test -f \"$CLAUDE_PROJECT_DIR/.dsh/hooks/continue\" || exit 0; rm -f \"$CLAUDE_PROJECT_DIR/.dsh/hooks/continue\"; echo \"还有一条没核：把没核完的那条核掉，或标成未验证。\" >&2; exit 2'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "SubagentStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'printf \"%s review SubagentStart\\n\" \"$(date -Is)\" >> \"${DSH_HOOK_TRACE:-$CLAUDE_PROJECT_DIR/.dsh/hook-trace.log}\"'",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "SubagentStop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh -c 'printf \"%s review SubagentStop\\n\" \"$(date -Is)\" >> \"${DSH_HOOK_TRACE:-$CLAUDE_PROJECT_DIR/.dsh/hook-trace.log}\"'",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}

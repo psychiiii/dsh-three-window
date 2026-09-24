@@ -1,0 +1,57 @@
+{
+  "name": "@psychiiii/dsh-three-window-hooks",
+  "description": "Per-window hooks: project-level .dsh/hooks/<window>.json run on the stock interception points.",
+  "version": "0.1.6-alpha.2",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./config": {
+      "types": "./lib/config.d.ts",
+      "default": "./lib/config.js"
+    },
+    "./events": {
+      "types": "./lib/events.d.ts",
+      "default": "./lib/events.js"
+    },
+    "./windows": {
+      "types": "./lib/windows.d.ts",
+      "default": "./lib/windows.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.js.map",
+    "lib/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-hook-protocol": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-session": "*",
+    "@deepseek-ai/dsh-session-projection": "*",
+    "@deepseek-ai/dsh-shell": "*",
+    "@deepseek-ai/dsh-subagent": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-agent-loop": "*",
+    "@deepseek-ai/dsh-agent-loop-testkit": "*",
+    "@deepseek-ai/dsh-bash-local": "*",
+    "@deepseek-ai/dsh-hooks-claude-code": "*",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "*",
+    "@deepseek-ai/dsh-subagent-spawn-in-process": "*",
+    "@deepseek-ai/dsh-subprocess-local": "*",
+    "vitest": "*"
+  }
+}

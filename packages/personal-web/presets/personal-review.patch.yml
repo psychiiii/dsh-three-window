@@ -1,0 +1,214 @@
+# Agent preset personal-review (审核窗): one `@deepseek-ai/dsh-agent-preset` declaration, listed in
+# this package's `dsh.bundle.patch` after `cordis.patch.yml`. Rows follow the
+# dsh `standard` preset of the build baseline; the changes are the review
+# persona, the `personal-review` row, the spawn and workflow rows disabled, and the
+# deny and permission-lock rows at the end.
+- insert:
+    - id: preset-personal-review
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: personal-review
+        name: 审核窗
+        description: 三窗审核：只读锁定，不能写入或派生可变执行体。
+        order: 3
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              suffix: Your working directory is {{cwd}}.
+              prefix: |-
+                You are a read-only review coordinator powered by the {{model}} model.
+                You cannot choose a reviewer provider, model, or reasoning effort; those come
+                from the Review models settings, not from you.
+                You must not edit, write, or otherwise change files, configuration,
+                or git state.
+
+                When the current input is a construction report, a change baseline, or an
+                explicit request to review, you MUST call review_debate first — passing the
+                matching git ref, file path, or report path as its baseline — and then
+                present the report's conclusion (terminal state, findings, and retained
+                dissent) exactly. Never state a review conclusion that did not come from
+                that report.
+
+                You must not treat model identity, model capability, or model recency as
+                grounds to trust a finding. Do not say that a stronger model thinks
+                something. Do not weight, rank, or trust-tier findings, and do not explain
+                whom to believe. Output conclusions and evidence only; do not output
+                reasoning about how credible those conclusions are.
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          # Review debate is scoped to this preset so chat and construct do not
+          # list it. `maxTokens: 0` omits GenerateOptions.maxTokens; the adapter
+          # then uses defaultMaxTokens.
+          - id: personal-review
+            name: '@psychiiii/dsh-three-window/review'
+            config:
+              maxParallel: 3
+              timeoutMs: 300000
+              maxBaselineBytes: 262144
+              maxBaselineLines: 8000
+              maxRounds: 3
+              maxTokens: 0
+              grouping: evidence
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: command-goal
+            name: '@deepseek-ai/dsh-command-goal'
+          - id: tool-goal
+            name: '@deepseek-ai/dsh-tool-goal'
+          - id: planning
+            name: cordis:group
+            group: true
+            isolate:
+              planMode: true
+            config:
+              - id: plan-mode
+                name: '@deepseek-ai/dsh-plan-mode'
+                config:
+                  section: |
+                    You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+                    Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+                    The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+                    Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+                    Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+                    When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: tool-subagent-list-agents
+                name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                disabled: true
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  modelSelectionSettings: true
+                  backgroundMode: continuable
+              - id: tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                disabled: true
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+                  backgroundMode: continuable
+              - id: tool-subagent-codex
+                name: '@deepseek-ai/dsh-tool-subagent'
+                disabled: true
+                config:
+                  provider: codex
+                  toolName: subagent_codex
+                  backgroundMode: one-shot
+                  maxDepth: provider-managed
+              - id: tool-subagent-claude-code
+                name: '@deepseek-ai/dsh-tool-subagent'
+                disabled: true
+                config:
+                  provider: claude-code
+                  toolName: subagent_claude_code
+                  backgroundMode: one-shot
+                  maxDepth: provider-managed
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                disabled: true
+                config:
+                  provider: spawn
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+                disabled: true
+              - id: tool-ralph
+                name: '@deepseek-ai/dsh-tool-ralph'
+                disabled: true
+                config:
+                  subagentProvider: spawn
+                  maxRounds: 64
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+          - id: tool-plugin-manager
+            name: '@deepseek-ai/dsh-plugin-manager/tools'
+            disabled: true
+          # Mutation and delegation names are fenced after every row above, so
+          # an enabled deny row fails the preset mount if a listed name is
+          # absent. The spawn rows above stay `disabled: true` rows, not deny
+          # names.
+          - id: tool-deny
+            name: '@psychiiii/dsh-three-window/tool-deny'
+            config:
+              deny:
+                - write
+                - edit
+                - send_message
+                - interrupt_agent
+                - list_agents
+          - id: tool-deny-bash
+            name: '@psychiiii/dsh-three-window/tool-deny'
+            disabled: !!js process.platform === 'win32'
+            config:
+              deny:
+                - bash
+          - id: tool-deny-pwsh
+            name: '@psychiiii/dsh-three-window/tool-deny'
+            disabled: !!js process.platform !== 'win32'
+            config:
+              deny:
+                - pwsh
+          # `/permission` on this window is a scoped shadow that only accepts
+          # `read-only`.
+          - id: permission-lock
+            name: '@psychiiii/dsh-three-window/permission-lock'

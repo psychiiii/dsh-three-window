@@ -1,0 +1,62 @@
+{
+  "name": "@psychiiii/dsh-three-window-review",
+  "description": "Anonymous multi-model review: reviewer seats call models directly with no tools or session, and a controller returns one report after bounded challenge rounds.",
+  "version": "0.1.6-alpha.2",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./resolve": {
+      "types": "./lib/types/resolve.d.ts",
+      "default": "./lib/types/resolve.js"
+    },
+    "./prompts": {
+      "types": "./lib/types/prompts.d.ts",
+      "default": "./lib/types/prompts.js"
+    },
+    "./reviewers": {
+      "types": "./lib/types/reviewers.d.ts",
+      "default": "./lib/types/reviewers.js"
+    },
+    "./settings": {
+      "types": "./lib/types/settings.d.ts",
+      "default": "./lib/types/settings.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "bundle": "tsdown"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/cosmokit": "*",
+    "@deepseek-ai/dsh-fs": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-sandbox": "*",
+    "@deepseek-ai/dsh-sandbox-policy": "*",
+    "@deepseek-ai/dsh-session-projection": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-util-values": "*",
+    "@deepseek-ai/schemastery": "*",
+    "zod": "*"
+  },
+  "devDependencies": {
+    "vitest": "*"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ]
+}
