@@ -606,9 +606,6 @@ export function SessionNodeItem({
           {t(occupancyKey(node.past))}
         </span>
       )}
-      {node.active === true && (
-        <span className={css.activeBadge} data-workbench-active-badge="">{t('windows.active')}</span>
-      )}
       <span ref={titleRef} className={css.title}>{title}</span>
       {row.hasActiveSchedule && <ActiveScheduleIndicator t={t} />}
       {/* A blank New Session row is a provisional placeholder: nothing has

@@ -25,6 +25,8 @@ export interface ReviewDockInjected {
   loadCatalog: () => Promise<void>
   /** Persist reviewer rows against the revision the dialog was filled from. */
   saveSettings: (rows: readonly ReviewerSettingsRow[], expectedRevision?: number) => Promise<boolean>
+  /** Hold or release the review window's composer lock (see composer-lock.ts). */
+  lockComposer: (sessionId: string, locked: boolean, reason: string) => void
 }
 
 export type ReviewDockProps =
@@ -45,7 +47,7 @@ const TERMINAL_KEYS: Record<TerminalState, 'terminal.incomplete_review' | 'termi
  */
 export function ReviewDock({
   sessionId, useSessions, useProjection, useReviewSettings, useReviewCatalog,
-  loadSettings, loadCatalog, saveSettings, t,
+  loadSettings, loadCatalog, saveSettings, lockComposer, t,
 }: ReviewDockProps): ReactNode {
   const preset = useSessions((state) => {
     const value = state.byId[sessionId]?.projectionValues?.agentPreset
@@ -64,9 +66,21 @@ export function ReviewDock({
     void loadCatalog()
   }, [isReview, loadSettings, loadCatalog])
 
-  if (!isReview) return null
-
   const configured = settings.reviewers.filter(row => row.provider.length > 0 && row.model.length > 0)
+  // Locked only once the settings are known to hold no reviewer: while they are
+  // loading, or when they cannot be read, the window stays usable, so a
+  // settings failure can never lock it for good.
+  const needsReviewers = isReview && settings.status === 'ready' && configured.length === 0
+  const lockReason = t('lock.reason')
+  useEffect(() => {
+    lockComposer(sessionId, needsReviewers, lockReason)
+  }, [lockComposer, sessionId, needsReviewers, lockReason])
+  useEffect(() => () => { lockComposer(sessionId, false, '') }, [lockComposer, sessionId])
+
+  if (!isReview) return null
+  const singleRound = review !== undefined && review !== null
+    && review.reviewKind === 'single-model' && review.roundsUsed === 1
+
   const openModal = (): void => {
     void loadSettings()
     void loadCatalog()
@@ -81,7 +95,9 @@ export function ReviewDock({
         <Button
           variant="outline"
           size="sm"
+          className={needsReviewers ? css.needsConfig : undefined}
           data-personal-review-config=""
+          data-personal-review-needs-config={needsReviewers ? 'true' : undefined}
           onClick={openModal}
         >
           {t('config.button')}
@@ -126,11 +142,11 @@ export function ReviewDock({
           <div
             className={css.meta}
             data-review-kind={review.reviewKind}
-            data-review-stop={review.converged ? 'early' : 'round-cap'}
+            data-review-stop={singleRound ? 'single' : review.converged ? 'early' : 'round-cap'}
           >
             {review.reviewKind === 'single-model' ? t('reviewKind.single') : t('reviewKind.multi')}
             {' · '}
-            {t('stop', { value: review.converged ? t('stop.early') : t('stop.cap') })}
+            {t('stop', { value: singleRound ? t('stop.single') : review.converged ? t('stop.early') : t('stop.cap') })}
           </div>
           <div data-review-audit="">
             <div>{t('audit')}</div>

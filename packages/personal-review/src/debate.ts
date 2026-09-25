@@ -141,6 +141,11 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
   }))
   const modelCount = uniqueModelCount(audit)
   const reviewKind = modelCount <= 1 ? 'single-model' : 'multi-model'
+  // One seat is an ordinary single-model review: nobody else can corroborate
+  // or challenge its findings, so it runs one round and every finding it
+  // raises is a finding of the review, not dissent.
+  const singleSeat = input.seats.length === 1
+  const roundLimit = singleSeat ? 1 : input.maxRounds
   const prompts: DebatePromptRecord[] = []
   const rounds: DebateRound[] = []
   const collected: { seatId: string; findings: readonly ReviewFinding[] }[] = []
@@ -150,7 +155,7 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
   const failures: string[] = []
   let converged = false
 
-  for (let round = 1; round <= input.maxRounds; round += 1) {
+  for (let round = 1; round <= roundLimit; round += 1) {
     const mode = round === 1 ? 'initial' : 'challenge'
     const promptLabeled = labeled
     const roundPrompts: DebatePromptRecord[] = new Array(input.seats.length)
@@ -247,12 +252,15 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
       converged = true
       break
     }
-    if (round === input.maxRounds) {
-      converged = false
+    if (round === roundLimit) {
+      converged = singleSeat && failures.length === 0
     }
   }
 
-  const split = mergeFindings(collected, grouping)
+  const merged = mergeFindings(collected, grouping)
+  const split = singleSeat
+    ? { findings: [...merged.findings, ...merged.dissent], dissent: [] }
+    : merged
   const allFindings = [...split.findings, ...split.dissent]
   const terminal = terminalState({
     seatFailures: failures,

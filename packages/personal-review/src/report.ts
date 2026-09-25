@@ -66,7 +66,7 @@ export function renderDebateReport(input: ReportInput): string {
     `grouping ${input.grouping}`,
     `kind ${kindLabel(input.reviewKind)}`,
     `rounds ${String(input.roundsUsed)}`,
-    `stop ${input.converged ? '提前停止' : '达到轮次上限'}`,
+    `stop ${input.reviewKind === 'single-model' && input.roundsUsed === 1 ? '单轮评审' : input.converged ? '提前停止' : '达到轮次上限'}`,
     `terminal ${input.terminal}`,
     'findings:',
     findingLines.length === 0 ? '- (none)' : findingLines.join('\n'),

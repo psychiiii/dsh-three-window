@@ -100,3 +100,10 @@
 .error {
   color: var(--dsw-alias-danger, #c00);
 }
+
+/* No reviewer model configured: the review window is locked until one is saved. */
+.needsConfig {
+  border-color: var(--dsw-alias-danger, #e5484d) !important;
+  box-shadow: 0 0 0 1px var(--dsw-alias-danger, #e5484d);
+  color: var(--dsw-alias-danger, #e5484d);
+}

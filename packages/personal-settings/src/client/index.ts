@@ -11,7 +11,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ComposerBlocks } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -20,6 +20,7 @@ import { DEFAULT_PERSPECTIVE } from '@psychiiii/dsh-three-window-review/prompts'
 import { REVIEW_SETTINGS_ENTRY, type ReviewSettings } from '@psychiiii/dsh-three-window-review/reviewers'
 import { ReviewDock } from './ReviewDock.tsx'
 import type { ReviewDockInjected } from './ReviewDock.tsx'
+import { createReviewComposerLock } from './composer-lock.ts'
 import { ReviewSettingsController } from './settings-store.ts'
 import { WorkspaceHooksController, type SessionCatalog } from './workspace-hooks-store.ts'
 import { WindowReviewSection } from './WindowReviewSection.tsx'
@@ -59,6 +60,9 @@ export function apply(ctx: ClientContext): void {
   const controller = new ReviewSettingsController(
     ctx.configForms.get<ReviewSettings>(REVIEW_SETTINGS_ENTRY), ctx)
   ctx.effect(() => () => { controller.dispose() }, 'personal-review: settings controller')
+  const composerLock = createReviewComposerLock(
+    () => (ctx.get('conversation') as { blocks?: ComposerBlocks } | undefined)?.blocks)
+  ctx.effect(() => () => { composerLock.dispose() }, 'personal-review: review composer lock')
   const hooks = new WorkspaceHooksController(ctx, ctx.get('sessions') as unknown as SessionCatalog)
   ctx.effect(() => () => { hooks.dispose() }, 'personal-review: workspace hooks reader')
   const injected = (): ReviewDockInjected => ({
@@ -69,6 +73,7 @@ export function apply(ctx: ClientContext): void {
     loadSettings: () => controller.load(),
     loadCatalog: () => controller.loadCatalog(),
     saveSettings: (rows, expectedRevision) => controller.save(rows, expectedRevision),
+    lockComposer: (sessionId, locked, reason) => { composerLock.set(sessionId, locked, reason) },
   })
   ctx.slots.inject('conversation.input.dock', () =>
     ctx.slots.register(

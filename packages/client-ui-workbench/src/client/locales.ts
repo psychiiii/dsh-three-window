@@ -8,9 +8,12 @@ export type WorkbenchKey = keyof typeof zh
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
-  'pane.left': '左',
-  'pane.center': '中',
-  'pane.right': '右',
+  // Each pane position holds one fixed window kind (left chat, center
+  // construct, right review), so the pane chrome names the kind, using the
+  // sidebar tags' words.
+  'pane.left': '聊天 + Prompt',
+  'pane.center': '施工',
+  'pane.right': '审核',
   'pane.unbound': '未绑定会话',
   'pane.missing': '找不到会话 {sessionId}',
   'pane.notReady': '会话未就绪',
@@ -19,9 +22,9 @@ export const zh = {
 
 /** English dictionary. */
 export const en: Record<WorkbenchKey, string> = {
-  'pane.left': 'Left',
-  'pane.center': 'Center',
-  'pane.right': 'Right',
+  'pane.left': 'Chat + Prompt',
+  'pane.center': 'Construct',
+  'pane.right': 'Review',
   'pane.unbound': 'No session bound',
   'pane.missing': 'Session {sessionId} is not in the list',
   'pane.notReady': 'Session is not ready',

@@ -254,6 +254,8 @@ export class Workbench extends Service {
   private readonly selectedPresets = new Map<string, string>()
   private readonly listeners = new Set<() => void>()
   private readonly refs = new Map<string, SessionReference>()
+  /** Sessions {@link pinModel} already handled on this page. */
+  private readonly pinnedModels = new Set<string>()
   private readonly ready = new Map<string, boolean>()
   private readonly retaining = new Set<string>()
   private bootstrapError: string | undefined
@@ -1019,10 +1021,11 @@ export class Workbench extends Service {
       this.refs.set(id, reference)
       this.ready.set(id, false)
       void reference.ready.then(
-        () => {
+        (binding) => {
           if (this.refs.get(id) !== reference) return
           this.ready.set(id, true)
           this.publish()
+          void this.pinModel(id, binding.session)
         },
         () => {
           if (this.refs.get(id) !== reference) return
@@ -1030,6 +1033,45 @@ export class Workbench extends Service {
           this.publish()
         },
       )
+    }
+  }
+
+  /**
+   * Give a bound Session its own model selection when it has none yet.
+   *
+   * A Session with no selection and no logged request runs on the live global
+   * default model, and a pick in any pane both selects for that pane's Session
+   * and rewrites that default. A fresh pane would therefore follow every pick
+   * made in the other two. Selecting the current default for it once — through
+   * the same public `selectModel` the picker calls — makes each pane's model
+   * its own from the start; later picks stay per pane. A Session that already
+   * has a selection or a logged request is left alone.
+   * @param sessionId - the bound Session.
+   * @param session - its live face, from the pane's retained reference.
+   */
+  private async pinModel(sessionId: string, session: SessionFace): Promise<void> {
+    if (this.pinnedModels.has(sessionId)) return
+    this.pinnedModels.add(sessionId)
+    try {
+      const selection = await firstSnapshot(session.projections.faceOf('modelSelection')) as
+        { next: ModelPick | null } | undefined
+      if (selection === undefined || selection.next !== null) return
+      const ready = await this.awaitAttached()
+      const remote = (ready as { remote?: { session?: ModelRemote } }).remote?.session
+      if (remote?.modelCatalog === undefined || remote.selectModel === undefined) return
+      const catalog = await remote.modelCatalog()
+      if (!catalog.ok) throw new Error(`modelCatalog: ${catalog.error.message}`)
+      const pick = catalog.value.default
+      const result = await remote.selectModel({
+        sessionId: sessionId as SessionId,
+        provider: pick.provider,
+        model: pick.model,
+        ...pick.reasoningEffort === undefined ? {} : { reasoningEffort: pick.reasoningEffort },
+      })
+      if (!result.ok) throw new Error(`selectModel: ${result.error.message}`)
+    } catch (error) {
+      // The pane still works on the shared default; it only loses independence.
+      console.warn(`workbench: could not give session ${sessionId} its own model:`, error)
     }
   }
 
@@ -1084,6 +1126,46 @@ interface SessionCreateRemote {
     sessionId?: SessionId
     agentPreset?: string
   }): Promise<RemoteResult<{ sessionId: SessionId; agentPreset?: string }>>
+}
+
+/** One provider/model/effort choice, as the model catalog and `selectModel` spell it. */
+interface ModelPick {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
+/** The public Session Remote calls {@link Workbench.pinModel} uses; the picker uses the same two. */
+interface ModelRemote {
+  modelCatalog?(): Promise<RemoteResult<{ default: ModelPick }>>
+  selectModel?(request: {
+    sessionId: SessionId
+    provider: string
+    model: string
+    reasoningEffort?: string
+  }): Promise<RemoteResult<unknown>>
+}
+
+/**
+ * The first defined value of an observable snapshot, or undefined when none
+ * arrives within `timeoutMs` (a projection is seeded by the Session's first page).
+ */
+function firstSnapshot(
+  face: { getSnapshot(): unknown; subscribe(listener: () => void): () => void },
+  timeoutMs = 15_000,
+): Promise<unknown> {
+  const now = face.getSnapshot()
+  if (now !== undefined) return Promise.resolve(now)
+  return new Promise((resolve) => {
+    const stop = face.subscribe(() => {
+      const value = face.getSnapshot()
+      if (value === undefined) return
+      clearTimeout(timer)
+      stop()
+      resolve(value)
+    })
+    const timer = setTimeout(() => { stop(); resolve(undefined) }, timeoutMs)
+  })
 }
 
 interface SessionCreateRemoteHost {
