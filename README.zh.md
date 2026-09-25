@@ -59,7 +59,7 @@ git clone --depth 1 --branch dsh-v0.1.7-rc.1 https://github.com/deepseek-ai/deep
 git clone https://github.com/psychiiii/dsh-three-window.git && cd dsh-three-window
 python3 link-workspace-packages.py --checkout ~/src/dsh-0.1.7-rc.1
 node scripts/build-package.mjs
-sh out/release/dsh-three-window-*.sh
+sh out/release/dsh-three-window.sh
 ```
 </details>
 
