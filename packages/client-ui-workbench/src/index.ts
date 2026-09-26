@@ -23,7 +23,6 @@ export {
 
 /**
  * Inject the resolved window-bootstrap strategy for the Client plugin.
- * `hostCwd` is `process.cwd()` at inject time, not a Config default.
  * @param ctx - Host context.
  * @param config - cordis.yml row; empty `windows` disables Client bootstrap.
  */
@@ -36,7 +35,6 @@ export function apply(ctx: Context, config: Config = {}): void {
       value: {
         windows: resolved.windows,
         reuse: resolved.reuse,
-        hostCwd: process.cwd(),
         ...(resolved.projectRoot === undefined ? {} : { projectRoot: resolved.projectRoot }),
       },
     })

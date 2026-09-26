@@ -354,7 +354,9 @@ function orderedUngrouped(
  * Group Sessions by Workspace: one group per caller-ordered entity, with
  * members resolved from caller-ordered sessionIds. Sessions outside every
  * Workspace trail in the browser-local Ungrouped order, which falls back to
- * recency before that order is initialized.
+ * recency before that order is initialized — unless `withUngrouped` is false:
+ * in three-window mode such a Session can never be opened (a pane takes only
+ * a Workspace's members), so it is not listed at all.
  */
 function groupByWorkspace(
   list: SessionListState,
@@ -362,6 +364,7 @@ function groupByWorkspace(
   archived: ReadonlySet<SessionId>,
   occupied: ReadonlySet<SessionId>,
   ungroupedOrder: readonly string[] | undefined,
+  withUngrouped: boolean,
 ): Group[] {
   const current = mainSessionId(list)
   const groups: Group[] = []
@@ -384,7 +387,7 @@ function groupByWorkspace(
     .map(id => list.byId[id])
     .filter((s): s is SessionSummary =>
       s !== undefined && !accounted.has(s.id) && sessionVisible(s, current, archived, occupied))
-  if (stray.length > 0) {
+  if (withUngrouped && stray.length > 0) {
     groups.push(buildGroup(
       UNGROUPED_KEY,
       undefined,
@@ -497,7 +500,7 @@ export function deriveGroups(
     ? undefined
     : owningGroupKey(workspaces, current)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, occupied, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(list, workspaces, archived, occupied, view.ungroupedOrder, !windows.active)) {
     const expanded = expandedGroups.has(g.key)
     const structured = windows.active
       ? { windows: expanded
@@ -532,14 +535,27 @@ export function visibleSessionIds(
   list: SessionListState,
   archivedSessionIds: readonly SessionId[],
   windows: WindowsView = NO_WINDOWS,
+  workspaces?: readonly WorkspaceView[],
 ): SessionId[] {
   const archived = new Set(archivedSessionIds)
   const occupied = windowIds(windowRoles(windows), archived)
   const current = mainSessionId(list)
+  const members = windows.active && workspaces !== undefined ? workspaceMemberIds(workspaces) : undefined
   return list.ids.filter((id) => {
     const s = list.byId[id]
     return s !== undefined && sessionVisible(s, current, archived, occupied)
+      && (members === undefined || members.has(id))
   })
+}
+
+/**
+ * Every Session some Workspace accounts for. In three-window mode only these
+ * are listed or searchable: anything else could not be opened.
+ * @param workspaces - listed Workspaces.
+ * @returns their member ids.
+ */
+export function workspaceMemberIds(workspaces: readonly WorkspaceView[]): Set<SessionId> {
+  return new Set(workspaces.flatMap(workspace => workspace.sessionIds))
 }
 
 /**
@@ -572,6 +588,7 @@ export function deriveFlat(
  * @param statuses - unified UI status by Session.
  * @param content - ranked Host content-search page.
  * @param limit - protocol-owned maximum merged row count.
+ * @param membersOnly - three-window mode: only Workspace members match.
  * @returns bounded deduplicated flat rows and a refine-query hint bit.
  */
 export function deriveSearchResults(
@@ -582,6 +599,7 @@ export function deriveSearchResults(
   statuses: SessionStatuses,
   content: { items: readonly SessionSearchResultItem[]; hasMore: boolean },
   limit: number,
+  membersOnly = false,
 ): SearchResultSet {
   const q = query.trim().toLowerCase()
   if (q === '') return { items: [], hasMore: false }
@@ -609,6 +627,7 @@ export function deriveSearchResults(
     // Blank placeholders never match a query (their canonical title displays
     // localized, so matching it would tie search to one language).
     if (summary === undefined || summary.blank || !sessionVisible(summary, current, archived, noneOccupied)) continue
+    if (membersOnly && !workspaceBySession.has(summary.id)) continue
     if (
       sessionTitle(summary).toLowerCase().includes(q)
       || labelOf(summary).toLowerCase().includes(q)
@@ -630,7 +649,8 @@ export function deriveSearchResults(
   for (const summary of orderedLocal) include(summary)
   for (const item of content.items) {
     const summary = list.byId[item.sessionId]
-    if (summary !== undefined && !summary.blank && sessionVisible(summary, current, archived, noneOccupied)) include(summary)
+    if (summary !== undefined && !summary.blank && sessionVisible(summary, current, archived, noneOccupied)
+      && (!membersOnly || workspaceBySession.has(summary.id))) include(summary)
   }
 
   return {

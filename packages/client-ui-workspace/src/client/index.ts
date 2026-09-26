@@ -248,6 +248,7 @@ export function apply(ctx: Context): void {
       directoryFlow: browserFlowSource,
       hostInfo,
       workspacePrompts: { getSnapshot: readPrompts, subscribe: subscribePrompts },
+      addWorkspaceRequests: uiWorkspace.addWorkspaceRequests,
       windows: {
         getSnapshot: readWindows,
         subscribe: (listener) => {

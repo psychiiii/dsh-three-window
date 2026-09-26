@@ -58,13 +58,11 @@ export interface Config {
 }
 
 /**
- * Page-global payload the Host injects. `hostCwd` is not a cordis.yml field;
- * the Host writes `process.cwd()` when serving the page.
+ * Page-global payload the Host injects: the row's Config. The directory the
+ * server was started from is deliberately not part of it (see
+ * `PROJECT_ROOT_MISSING` in `project-root.ts`).
  */
-export interface WorkbenchBootPayload extends Config {
-  /** Server process cwd captured at inject; never `$host.home`. */
-  hostCwd?: string
-}
+export type WorkbenchBootPayload = Config
 
 /** Resolved bootstrap strategy after schema defaults. */
 export interface ResolvedWorkbenchConfig {
@@ -72,8 +70,6 @@ export interface ResolvedWorkbenchConfig {
   readonly reuse: WorkbenchReuseStrategy
   /** Explicit `config.projectRoot` when set and non-empty. */
   readonly projectRoot: string | undefined
-  /** Host-injected server cwd when the page global carried one. */
-  readonly hostCwd: string | undefined
 }
 
 const windowSchema = z.object({
@@ -91,15 +87,12 @@ export const Config = z.object({
 /**
  * Validate plugin config and fill schema defaults.
  * @param config - Host row, Client apply argument, or injected page global.
- * @returns windows, reuse strategy, optional project root, and optional Host cwd.
+ * @returns windows, reuse strategy, and optional project root.
  * @throws when `windows` is not empty and not length 3, a preset is blank, a
  *   three-row window omits `permission` or names an unknown preset, or
  *   `projectRoot` is present and empty.
  */
 export function resolveWorkbenchConfig(config: WorkbenchBootPayload = {}): ResolvedWorkbenchConfig {
-  const hostCwd = typeof config.hostCwd === 'string' && config.hostCwd.length > 0
-    ? config.hostCwd
-    : undefined
   const resolved = Config(config)
   const windows = resolved.windows as WorkbenchWindowConfig[]
   const reuse = resolved.reuse as WorkbenchReuseStrategy
@@ -140,7 +133,7 @@ export function resolveWorkbenchConfig(config: WorkbenchBootPayload = {}): Resol
   const projectRoot = typeof resolved.projectRoot === 'string' && resolved.projectRoot.length > 0
     ? resolved.projectRoot
     : undefined
-  return { windows: nextWindows, reuse, projectRoot, hostCwd }
+  return { windows: nextWindows, reuse, projectRoot }
 }
 
 /**

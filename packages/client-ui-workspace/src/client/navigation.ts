@@ -8,7 +8,7 @@ import type {
   SessionTarget,
   SessionListState,
 } from '@deepseek-ai/dsh-api-session-controller/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
 import type {
   IWorkspaces, WorkspaceId, WorkspaceView,
@@ -78,11 +78,18 @@ export interface UiWorkspace {
   connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
   /**
    * Start a New Session flow and navigate to its Session. In three-window mode
-   * it enters the Workspace instead, because the three windows are the Sessions.
+   * it enters the Workspace instead, because the three windows are the Sessions;
+   * and with no Workspace listed at all it asks the Workspace list to open its
+   * add-Workspace picker, since three windows need a Workspace to open in.
    * @param workspaceId - explicit target; absent inherits the focused Workspace,
    *   then the current Session's, then the most recent one.
    */
   startSession(workspaceId?: WorkspaceId): void
+  /**
+   * Requests to open the add-Workspace picker, counted: the Workspace list
+   * opens the picker each time the count rises.
+   */
+  readonly addWorkspaceRequests: SnapshotStore<number>
   /**
    * Archive a Session and clear it when it is the current selection. A
    * Session a workbench pane currently shows is refused before anything is
@@ -142,6 +149,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     {}, { persist: { name: 'dsh.sessions.current' } },
   )
   private mainReference: SessionReference | undefined
+  /** See {@link UiWorkspace.addWorkspaceRequests}. */
+  readonly addWorkspaceRequests: SnapshotStore<number> = createSnapshotStore(0)
 
   /**
    * @param ctx - Client root Context.
@@ -230,6 +239,13 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     // Workspace nobody named.
     const target = workspaceId ?? this.workbench()?.focusedWorkspaceId() ?? currentWorkspaceId ?? recent
     if (target === undefined) {
+      // Three-window mode with no Workspace at all: there is nothing to enter
+      // and nowhere a window could open, so New Session means "add one".
+      if (workspace.phase === 'ready' && workspace.items.length === 0
+        && this.workbench()?.ownsWorkspaceEntry() === true) {
+        this.addWorkspaceRequests.set(this.addWorkspaceRequests.getSnapshot() + 1)
+        return
+      }
       this.clearMain()
       return
     }

@@ -152,6 +152,12 @@ export interface WorkbenchSnapshot {
   readonly focusedSessionId: string | undefined
   /** Bootstrap failure shown on unbound panes; absent after a successful bind. */
   readonly bootstrapError: string | undefined
+  /**
+   * No Workspace is listed and none is configured: the ordinary first-run
+   * (or everything-deleted) state. The panes show an empty state inviting the
+   * user to add a Workspace; it is not a failure.
+   */
+  readonly noWorkspace: boolean
   /** Workspace the panes show; absent before the first focus. */
   readonly focusedWorkspaceId: WorkspaceId | undefined
   /** Every Workspace bound on this page or holding stored windows. */
@@ -220,6 +226,7 @@ const UNBOUND_SNAPSHOT: WorkbenchSnapshot = {
   panes: [UNBOUND_PANE, UNBOUND_PANE, UNBOUND_PANE],
   focusedSessionId: undefined,
   bootstrapError: undefined,
+  noWorkspace: false,
   focusedWorkspaceId: undefined,
   layouts: new Map(),
   limitPrompt: undefined,
@@ -259,6 +266,11 @@ export class Workbench extends Service {
   private readonly ready = new Map<string, boolean>()
   private readonly retaining = new Set<string>()
   private bootstrapError: string | undefined
+  private noWorkspace = false
+  /** Workspace ids some list snapshot on this page has held; only these can be found deleted. */
+  private readonly everListed = new Set<string>()
+  /** Sessions this page created, by the Workspace they were created for. */
+  private readonly created = new Map<string, WorkspaceId>()
   private readonly applied: ResolvedWorkbenchConfig | undefined
   private attached: Context | undefined
   private readonly attachWaiters: Array<{
@@ -328,6 +340,68 @@ export class Workbench extends Service {
     if (this.bootstrapError === message) return
     this.bootstrapError = message
     this.publish()
+  }
+
+  /**
+   * Record whether there is no Workspace to show: set by bootstrap while no
+   * Workspace is listed and none is configured, cleared once one is.
+   * @param none - true while there is nothing to bind.
+   */
+  setNoWorkspace(none: boolean): void {
+    if (this.noWorkspace === none) return
+    this.noWorkspace = none
+    this.publish()
+  }
+
+  /**
+   * Drop every binding and stored window record of Workspaces no longer
+   * listed. A deleted Workspace's windows are then nobody's: its blank
+   * Sessions stop counting as occupied and leave the Workspace list at once
+   * instead of after a reload, and a Workspace later added at the same path
+   * starts from nothing instead of inheriting Sessions dsh no longer counts
+   * as its members.
+   *
+   * A binding is dropped only once its Workspace has been listed and then
+   * vanished: a Workspace this page just created can be bound before the list
+   * names it. A stored record with no binding is dropped whenever it is not
+   * listed — it can only belong to a Workspace deleted while no page ran.
+   * @param listed - ids of the Workspaces the list holds now.
+   * @returns the Session ids those dropped bindings and records held.
+   */
+  forgetUnlistedWorkspaces(listed: ReadonlySet<string>): string[] {
+    for (const workspaceId of listed) this.everListed.add(workspaceId)
+    const gone = (workspaceId: string): boolean =>
+      !listed.has(workspaceId) && (this.everListed.has(workspaceId) || !this.bindings.has(workspaceId as WorkspaceId))
+    const dropped: string[] = []
+    let changed = false
+    const history = this.history()
+    if (Object.keys(history).some(gone)) {
+      const next: Record<string, WindowHistoryState[string]> = {}
+      for (const [workspaceId, record] of Object.entries(history)) {
+        if (!gone(workspaceId)) next[workspaceId] = record
+        else dropped.push(...record.current.filter(id => id !== ''), ...record.past.flat())
+      }
+      this.writeHistory(next)
+      changed = true
+    }
+    for (const [workspaceId, binding] of [...this.bindings]) {
+      if (!gone(workspaceId)) continue
+      for (const window of binding.windows) dropped.push(window.sessionId)
+      this.bindings.delete(workspaceId)
+      this.everListed.delete(workspaceId)
+      changed = true
+    }
+    for (const [id, owner] of [...this.created]) {
+      if (gone(owner)) {
+        this.created.delete(id)
+        dropped.push(id)
+      }
+    }
+    if (changed) {
+      this.syncReferences()
+      this.publish()
+    }
+    return [...new Set(dropped)]
   }
 
   /**
@@ -506,11 +580,24 @@ export class Workbench extends Service {
       agentPreset: spec.agentPreset,
     })
     if (!result.ok) throw new Error(result.error.message)
+    const created = result.value.sessionId
+    // Recorded before anything else can fail: a Session that exists but was
+    // never reported back would otherwise be neither a member yet nor ours,
+    // and the next pass would create another in its place.
+    this.created.set(created, workspaceId)
     const sessions = this.ctx.sessions as ISessions
     await sessions.refresh()
-    const created = result.value.sessionId
     await this.applyCreatedPermission(sessions, created, spec, index)
     return created
+  }
+
+  /**
+   * Sessions this page created for one Workspace, member or not yet.
+   * @param workspaceId - the Workspace.
+   * @returns their ids.
+   */
+  createdFor(workspaceId: WorkspaceId): string[] {
+    return [...this.created].filter(([, owner]) => owner === workspaceId).map(([id]) => id)
   }
 
   /**
@@ -969,7 +1056,6 @@ export class Workbench extends Service {
       workspaces: workspaces.list.getSnapshot().items,
       sessionUpdatedAt,
       configProjectRoot: resolved.projectRoot,
-      hostCwd: resolved.hostCwd,
       hostHome: remote?.$host?.home,
     })
     return workspaces.list.getSnapshot().items
@@ -1101,6 +1187,7 @@ export class Workbench extends Service {
       ],
       focusedSessionId: binding.focusedSessionId,
       bootstrapError: this.bootstrapError,
+      noWorkspace: this.noWorkspace,
       focusedWorkspaceId: this.focused,
       layouts,
       limitPrompt: this.limitPrompt,

@@ -177,6 +177,11 @@ export type WorkspaceBrowserInjected = {
     windows: HostObservable<WindowsSnapshot>
     /** Each Workspace's turn prompt; a constant unavailable view without the settings package. */
     workspacePrompts: HostObservable<WorkspacePromptsView>
+    /**
+     * Count of requests to open the add-Workspace picker (New Session with no
+     * Workspace in three-window mode). The picker opens each time it rises.
+     */
+    addWorkspaceRequests: HostObservable<number>
   }
   /**
    * Create a window of pane kind `index` in a Workspace through the workbench's

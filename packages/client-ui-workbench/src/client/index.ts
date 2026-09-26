@@ -75,8 +75,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /**
- * Client plugin body: register the workbench service and shadow the main
- * Conversation occupant with the three-pane panel.
+ * Client plugin body: register the workbench service and, when three windows
+ * are configured, shadow the main Conversation occupant with the three-pane
+ * panel. With no windows configured the service stays (so every consumer reads
+ * `windowed()` as false) but the main area is left to dsh's own single-session
+ * view; otherwise an empty three-pane panel would cover it.
  * @param ctx - client root context.
  * @param config - apply argument, else the Host-injected page global, else empty windows.
  */
@@ -84,6 +87,7 @@ export function apply(ctx: ClientContext, config?: WorkbenchBootPayload): void {
   const resolved = resolveClientWorkbenchConfig(config)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workbench: dictionaries')
   const workbench = new Workbench(ctx, resolved, createFocusStore(), createWindowHistoryStore())
+  if (resolved.windows.length !== WORKBENCH_WINDOW_COUNT) return
   ctx.slots.inject('main', function* () {
     yield ctx.slots.register({
       name: 'main',
@@ -105,7 +109,6 @@ export function apply(ctx: ClientContext, config?: WorkbenchBootPayload): void {
       locale: NS,
     }, WorkbenchConversation)
   })
-  if (resolved.windows.length !== WORKBENCH_WINDOW_COUNT) return
   ctx.inject(['workspaces', 'remote', 'remote.agentPresets', 'remote.session'], (ready) => {
     ready.effect(
       () => workbench.attach(ready),

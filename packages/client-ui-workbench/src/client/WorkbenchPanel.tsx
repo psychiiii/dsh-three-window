@@ -18,7 +18,9 @@ export type WorkbenchPanelProps =
 /**
  * Occupant for `main` key `conversation` (shadows the shipped single-session
  * panel). Each pane retains its Session and renders the Conversation factory.
- * Unbound, missing, and not-ready panes show an explicit status.
+ * Unbound, missing, and not-ready panes show an explicit status. With no
+ * Workspace at all the three panes give way to one empty state that points
+ * at adding a Workspace: that is the first-run state, not a failure.
  * @param props - main-slot runtime, Conversation child, locale, and workbench inject.
  * @returns the three-pane occupant.
  */
@@ -28,7 +30,18 @@ export function WorkbenchPanel({
   const panes = useWorkbench(snapshot => snapshot.panes)
   const bootstrapError = useWorkbench(snapshot => snapshot.bootstrapError)
   const focusedSessionId = useWorkbench(snapshot => snapshot.focusedSessionId)
+  const noWorkspace = useWorkbench(snapshot => snapshot.noWorkspace)
   const listed = useSessions(state => state.byId)
+  if (noWorkspace && panes.every(pane => pane.sessionId === undefined)) {
+    return (
+      <div className={css.root} data-workbench-panes="0" data-workbench-empty="">
+        <div className={css.empty}>
+          <div className={css.emptyTitle}>{t('empty.title')}</div>
+          <div className={css.emptyBody}>{t('empty.body')}</div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div
       className={css.root}

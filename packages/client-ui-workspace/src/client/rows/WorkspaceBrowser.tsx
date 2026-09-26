@@ -823,6 +823,7 @@ function SearchResults({
   query,
   remote,
   resultLimit,
+  membersOnly,
   usePanelInfo,
   t,
 }: Pick<WorkspaceBrowserProps, 'useSessions' | 'useSessionStatus' | 'open' | 't' | 'usePanelInfo'> & {
@@ -831,6 +832,8 @@ function SearchResults({
   query: string
   remote: RemoteSearchState
   resultLimit: number
+  /** Three-window mode: Sessions outside every Workspace cannot be opened, so they do not match. */
+  membersOnly: boolean
 }) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const list = useSessions(s => s)
@@ -847,8 +850,9 @@ function SearchResults({
       statuses,
       currentRemote,
       resultLimit,
+      membersOnly,
     ),
-    [list, workspaces, query, archivedSessionIds, statuses, currentRemote, resultLimit],
+    [list, workspaces, query, archivedSessionIds, statuses, currentRemote, resultLimit, membersOnly],
   )
   const pending = currentRemote.status === 'loading'
   const failed = currentRemote.status === 'error'
@@ -922,6 +926,7 @@ export function WorkspaceBrowser({
   useHostInfo,
   useWindows,
   useWorkspacePrompts,
+  useAddWorkspaceRequests,
   saveWorkspacePrompt,
   createWindow,
   restorePast,
@@ -960,8 +965,8 @@ export function WorkspaceBrowser({
     return list.ids.filter(id => list.byId[id] !== undefined && !accounted.has(id))
   }, [list, workspaces])
   const flatMemberIds = useMemo(
-    () => visibleSessionIds(list, archivedSessionIds, windows),
-    [archivedSessionIds, list, windows],
+    () => visibleSessionIds(list, archivedSessionIds, windows, workspaces),
+    [archivedSessionIds, list, windows, workspaces],
   )
   const orderedWorkspaces = useMemo(() => workspaces.map((workspace) => {
     const memberIds = workspace.sessionIds
@@ -1104,6 +1109,15 @@ export function WorkspaceBrowser({
   // Section-header ＋ opens the picker menu (same popover in wide and rail
   // states; the menu anchors on this button).
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
+  // New Session with no Workspace asks for the add picker; count the requests
+  // seen so a mount never replays an old one.
+  const addRequests = useAddWorkspaceRequests(count => count)
+  const seenAddRequests = useRef(addRequests)
+  useEffect(() => {
+    if (addRequests === seenAddRequests.current) return
+    seenAddRequests.current = addRequests
+    if (directoryFlowAvailable) setWsPickerOpen(true)
+  }, [addRequests, directoryFlowAvailable])
   const wsPlusRef = useRef<HTMLButtonElement>(null)
   const composingRef = useRef(false)
 
@@ -1477,6 +1491,7 @@ export function WorkspaceBrowser({
               query={normalizedQuery}
               remote={remoteSearch}
               resultLimit={searchResultLimit}
+              membersOnly={windows.active}
               t={t}
             />
           )
@@ -1677,7 +1692,9 @@ export function WorkspaceBrowser({
         title={t('delete.workspace')}
         {...deleteTarget === null
           ? {}
-          : { description: t('delete.desc', { name: deleteTarget.title }) }}
+          // Three-window mode lists no Ungrouped bucket, so the official
+          // "its sessions appear under Ungrouped" would be untrue there.
+          : { description: t(windows.active ? 'delete.desc.windows' : 'delete.desc', { name: deleteTarget.title }) }}
         footer={(
           <>
             <Button variant="outline" disabled={deleting} onClick={closeDelete}>{t('cancel')}</Button>

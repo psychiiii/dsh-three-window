@@ -59,3 +59,29 @@
 .paneFocused {
   box-shadow: inset 0 2px 0 var(--dsw-alias-info, #3b82f6);
 }
+
+/* No Workspace at all: one centered empty state instead of three panes. */
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.emptyBody {
+  max-width: 420px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+}

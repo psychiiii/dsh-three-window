@@ -24,7 +24,7 @@ import type { RemoteHostFacts, RemoteResult } from '@deepseek-ai/dsh-api-remotes
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { WORKBENCH_WINDOW_COUNT, type ResolvedWorkbenchConfig, type WorkbenchWindowConfig } from '../config.ts'
 import {
-  resolveProjectRoot, sameProjectPath,
+  PROJECT_ROOT_MISSING, resolveProjectRoot, sameProjectPath,
   type ProjectRootRequest, type ProjectRootSpec,
 } from '../project-root.ts'
 import { projectedPreset, type Workbench } from './service.ts'
@@ -112,10 +112,12 @@ export function watchWorkbenchPanes(
 }
 
 /**
- * One reconcile pass over the focused Workspace: resolve it, then bind one
- * Session per window, creating only what that Workspace is missing. Sessions
- * whose `cwd` does not equal the Workspace path are not reused, and no other
- * Workspace's windows are touched.
+ * One reconcile pass over the focused Workspace: forget the windows of
+ * Workspaces that were deleted, resolve the focused one, then bind one Session
+ * per window, creating only what that Workspace is missing. Only the
+ * Workspace's own members are reused — a Session at the same path that dsh
+ * does not count as a member cannot send there — and no other Workspace's
+ * windows are touched.
  * @param sessions - Session Controller.
  * @param workspaces - Workspace Controller.
  * @param remote - Host facts (`$host.home` is only used to reject home).
@@ -134,6 +136,11 @@ export async function reconcileOnce(
   signal: AbortSignal,
 ): Promise<void> {
   if (config.windows.length !== WORKBENCH_WINDOW_COUNT) return
+  const listedNow = workspaces.list.getSnapshot()
+  if (listedNow.phase === 'ready') {
+    const listed = new Set<string>(listedNow.items.map(item => item.workspaceId))
+    for (const id of workbench.forgetUnlistedWorkspaces(listed)) owned.delete(id)
+  }
   const workspace = await ensureWorkspace(sessions, workspaces, remote, workbench, config)
   if (signal.aborted || workspace === undefined) return
   const list = sessions.list.getSnapshot()
@@ -148,6 +155,7 @@ export async function reconcileOnce(
     ? bound
     : workbench.storedWindows(workspace.workspaceId).current
   for (const id of boundIds) if (id !== '') owned.add(id)
+  for (const id of workbench.createdFor(workspace.workspaceId)) owned.add(id)
   const past = new Set(workbench.storedWindows(workspace.workspaceId).past.flat())
   const claimed = new Set<string>()
   const next: WorkbenchWindow[] = []
@@ -235,7 +243,7 @@ function restoreOtherWorkspaces(
  * @param sessions - Session list.
  * @param workspaces - Workspace list.
  * @param remote - Host facts.
- * @param config - resolved Config plus injected `hostCwd`.
+ * @param config - resolved Config.
  * @returns the request object; no hidden defaults.
  */
 export function projectRootRequest(
@@ -253,7 +261,6 @@ export function projectRootRequest(
     workspaces: workspaces.list.getSnapshot().items,
     sessionUpdatedAt,
     configProjectRoot: config.projectRoot,
-    hostCwd: config.hostCwd,
     hostHome: remote.$host.home,
   }
 }
@@ -282,7 +289,10 @@ async function ensureWorkspace(
   const focused = workbench.focusedWorkspaceId()
   if (focused !== undefined) {
     const listed = snapshot.items.find(item => item.workspaceId === focused)
-    if (listed !== undefined) return listed
+    if (listed !== undefined) {
+      workbench.setNoWorkspace(false)
+      return listed
+    }
     // A stored Workspace that was deleted between pages: drop it so the
     // fallback below runs, and so the next load does not read it again.
     workbench.forgetFocusedWorkspace()
@@ -295,8 +305,15 @@ async function ensureWorkspace(
     if ((hostHome === undefined || hostHome === '') && snapshot.items.length === 0) {
       return undefined
     }
+    if (error instanceof Error && error.message === PROJECT_ROOT_MISSING) {
+      // Nothing to show yet: the empty state, not a failure.
+      workbench.setBootstrapError(undefined)
+      workbench.setNoWorkspace(true)
+      return undefined
+    }
     throw error
   }
+  workbench.setNoWorkspace(false)
   const existing = snapshot.items.find(item => sameProjectPath(item.path, spec.path))
   if (existing !== undefined) {
     workbench.focusWorkspace(existing.workspaceId)
@@ -373,6 +390,15 @@ function pickRecentMatching(
   return best === undefined ? undefined : { sessionId: best.id, title: best.displayTitle }
 }
 
+/**
+ * Whether a Session may be a window of this Workspace: it must be one of the
+ * Workspace's members. A Session this page created or bound for the
+ * Workspace also counts while the list has not yet named it a member, as long
+ * as its `cwd` is the Workspace's (or unknown). A Session that merely shares
+ * the path does not: after a Workspace is deleted and the same path added
+ * again, dsh keeps the old Sessions outside the new Workspace, and one bound
+ * into a pane could not send.
+ */
 function usableSession(
   summary: SessionSummary,
   workspace: WorkspaceView,
@@ -382,10 +408,8 @@ function usableSession(
 ): boolean {
   if (archived.has(summary.id)) return false
   if (summary.origin === 'subagent' || summary.parentId !== undefined) return false
+  if (sameProjectPath(workspace.path, projectRoot) && workspace.sessionIds.includes(summary.id)) return true
+  if (!owned.has(summary.id)) return false
   const cwd = summary.cwd
-  const cwdMatches = typeof cwd === 'string' && cwd.length > 0 && sameProjectPath(cwd, projectRoot)
-  const workspaceMatches = sameProjectPath(workspace.path, projectRoot)
-    && workspace.sessionIds.includes(summary.id)
-  if (cwdMatches || workspaceMatches) return true
-  return owned.has(summary.id) && (cwd === undefined || cwd.length === 0)
+  return cwd === undefined || cwd.length === 0 || sameProjectPath(cwd, projectRoot)
 }

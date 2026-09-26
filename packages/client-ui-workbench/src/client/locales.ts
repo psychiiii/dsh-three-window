@@ -18,6 +18,8 @@ export const zh = {
   'pane.missing': '找不到会话 {sessionId}',
   'pane.notReady': '会话未就绪',
   'pane.bootstrapFailed': '工作台引导失败：{message}',
+  'empty.title': '还没有工作区',
+  'empty.body': '点左侧的「添加工作区」选一个项目目录，三个窗口会在那里打开。',
 }
 
 /** English dictionary. */
@@ -29,4 +31,6 @@ export const en: Record<WorkbenchKey, string> = {
   'pane.missing': 'Session {sessionId} is not in the list',
   'pane.notReady': 'Session is not ready',
   'pane.bootstrapFailed': 'Workbench bootstrap failed: {message}',
+  'empty.title': 'No workspace yet',
+  'empty.body': 'Use “Add workspace” on the left to pick a project directory; the three windows open there.',
 }

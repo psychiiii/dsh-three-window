@@ -11,14 +11,17 @@ export const PROJECT_ROOT_EMPTY = 'workbench config.projectRoot must be a non-em
 export const PROJECT_ROOT_IS_HOST_HOME =
   'workbench config.projectRoot must not be the host home directory'
 
-/** No remaining source after skipping Host home. */
-export const PROJECT_ROOT_MISSING = [
-  'workbench project root is missing: set config.projectRoot to a project directory',
-  'or start dsh from a project directory (not the host home)',
-].join(', ')
+/**
+ * No Workspace is listed and no `config.projectRoot` is set. This is the
+ * ordinary first-run state, not a fault: the panes show an empty state until
+ * the user adds a Workspace. The directory dsh was started from is never a
+ * source — dsh itself never registers it, and adopting it registered
+ * whatever directory the server happened to run in.
+ */
+export const PROJECT_ROOT_MISSING = 'workbench project root is missing: no Workspace is listed and config.projectRoot is unset'
 
 /** Which request field produced {@link ProjectRootSpec.path}. */
-export type ProjectRootSource = 'workspace' | 'config' | 'host-cwd'
+export type ProjectRootSource = 'workspace' | 'config'
 
 /** One listed Workspace enough for recency pick and path match. */
 export interface ProjectRootWorkspace {
@@ -29,7 +32,7 @@ export interface ProjectRootWorkspace {
 
 /**
  * Inputs for {@link resolveProjectRoot}. Callers fill this object; the
- * function does not read `process.cwd()`, `$host.home`, or schema defaults.
+ * function does not read `$host.home` or schema defaults.
  */
 export interface ProjectRootRequest {
   /** Listed workspaces in Host order. */
@@ -38,8 +41,6 @@ export interface ProjectRootRequest {
   readonly sessionUpdatedAt: Readonly<Record<string, number>>
   /** Overlay / profile `config.projectRoot` after schema parse. */
   readonly configProjectRoot: string | undefined
-  /** Host-injected `process.cwd()` captured when the page was served. */
-  readonly hostCwd: string | undefined
   /** `remote.$host.home`; undefined until the ready frame. */
   readonly hostHome: string | undefined
 }
@@ -79,12 +80,11 @@ export function normalizeProjectPath(path: string): string {
  *    workspace whose path equals it; otherwise the most recently updated
  *    workspace that is not Host home.
  * 2. `config.projectRoot` when set. A value equal to Host home throws.
- * 3. `hostCwd` when set and not Host home.
- * 4. Otherwise throws {@link PROJECT_ROOT_MISSING}.
+ * 3. Otherwise throws {@link PROJECT_ROOT_MISSING}.
  *
- * `$host.home` is never returned. Reuse of a Session still requires that
- * Session's `cwd` or its workspace path equal this spec.
- * @param request - listed workspaces, optional config, Host cwd, Host home.
+ * `$host.home` is never returned. Reuse of a Session still requires that the
+ * Session is a member of the resolved Workspace.
+ * @param request - listed workspaces, optional config, Host home.
  * @returns the project directory and its source.
  * @throws {@link PROJECT_ROOT_EMPTY} when config is present and blank.
  * @throws {@link PROJECT_ROOT_IS_HOST_HOME} when config equals Host home.
@@ -105,11 +105,6 @@ export function resolveProjectRoot(request: ProjectRootRequest): ProjectRootSpec
 
   const existing = selectExistingWorkspace(request.workspaces, request.sessionUpdatedAt, home)
   if (existing !== undefined) return { path: existing.path, source: 'workspace' }
-
-  const cwd = nonempty(request.hostCwd)
-  if (cwd !== undefined && (home === undefined || !sameProjectPath(cwd, home))) {
-    return { path: cwd, source: 'host-cwd' }
-  }
   throw new Error(PROJECT_ROOT_MISSING)
 }
 
