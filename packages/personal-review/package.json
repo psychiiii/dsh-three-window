@@ -15,6 +15,10 @@
       "types": "./lib/types/resolve.d.ts",
       "default": "./lib/types/resolve.js"
     },
+    "./output-language": {
+      "types": "./lib/types/output-language.d.ts",
+      "default": "./lib/types/output-language.js"
+    },
     "./prompts": {
       "types": "./lib/types/prompts.d.ts",
       "default": "./lib/types/prompts.js"
@@ -30,6 +34,10 @@
     "./types": {
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"
+    },
+    "./workspace-prompt": {
+      "types": "./lib/types/workspace-prompt.d.ts",
+      "default": "./lib/types/workspace-prompt.js"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"

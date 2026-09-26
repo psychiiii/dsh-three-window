@@ -16,6 +16,14 @@ import {
   ReviewerResolutionError, resolveReviewerModels,
   type ReviewerCatalog, type ReviewerResolutionDetail,
 } from '@psychiiii/dsh-three-window-review/resolve'
+import {
+  DEFAULT_OUTPUT_LANGUAGES, outputLanguageOf, outputLanguagePromptedFromSection, outputLanguagesFromSection,
+  UNSPECIFIED_OUTPUT_LANGUAGE,
+  type OutputLanguageSettings, type OutputLanguageWindow,
+} from '@psychiiii/dsh-three-window-review/output-language'
+import {
+  withWorkspacePrompt, workspacePromptsFromSection, type WorkspacePromptEntry,
+} from '@psychiiii/dsh-three-window-review/workspace-prompt'
 
 /** One provider group the modal can offer. */
 export interface ReviewCatalogGroup {
@@ -43,6 +51,12 @@ export interface ReviewSettingsState {
   reviewers: readonly ReviewerSettingsRow[]
   /** Stored perspective text, verbatim; blank means the built-in default. */
   perspective: string
+  /** Each window's output language: a table tag, or blank for not specified. */
+  outputLanguage: OutputLanguageSettings
+  /** Whether the first-entry output-language prompt has been answered. */
+  outputLanguagePrompted: boolean
+  /** Each Workspace's turn prompt, keyed by normalized root path. */
+  workspacePrompts: readonly WorkspacePromptEntry[]
   /**
    * The catalog refusal behind `error`, when the refusal came from
    * {@link resolveReviewerModels}. The dialog renders its own copy from these
@@ -135,6 +149,9 @@ export class ReviewSettingsController {
     revision: 0,
     reviewers: [],
     perspective: '',
+    outputLanguage: { ...DEFAULT_OUTPUT_LANGUAGES },
+    outputLanguagePrompted: false,
+    workspacePrompts: [],
     errorDetail: null,
   })
 
@@ -219,7 +236,6 @@ export class ReviewSettingsController {
    *   omit to use the latest store revision.
    */
   async save(rows: readonly ReviewerSettingsRow[], expectedRevision?: number): Promise<boolean> {
-    const state = this.store.getSnapshot()
     let normalized: ReviewerSettingsRow[]
     try {
       normalized = assertReviewerTable(rows)
@@ -234,7 +250,6 @@ export class ReviewSettingsController {
       return false
     }
     return this.commit(
-      { reviewers: normalized, perspective: state.perspective },
       [{ op: 'set', path: ['reviewers'], value: normalized as never }],
       expectedRevision,
     )
@@ -249,12 +264,62 @@ export class ReviewSettingsController {
    * @returns whether the write landed.
    */
   async savePerspective(perspective: string, expectedRevision?: number): Promise<boolean> {
-    const state = this.store.getSnapshot()
     return this.commit(
-      { reviewers: state.reviewers, perspective },
       [{ op: 'set', path: ['perspective'], value: perspective as never }],
       expectedRevision,
     )
+  }
+
+  /**
+   * Persist one window's output language. Answers the first-entry prompt too:
+   * a user who picked a language in settings has made the choice it asks for.
+   * @param window - the window to change.
+   * @param tag - a table tag, or blank for not specified; anything else is refused.
+   * @returns whether the write landed.
+   */
+  async saveOutputLanguage(window: OutputLanguageWindow, tag: string): Promise<boolean> {
+    if (tag !== UNSPECIFIED_OUTPUT_LANGUAGE && outputLanguageOf(tag) === undefined) {
+      this.reportError(new Error(`unknown output language ${JSON.stringify(tag)}`))
+      return false
+    }
+    const next = { ...this.store.getSnapshot().outputLanguage, [window]: tag }
+    return this.commit([
+      { op: 'set', path: ['outputLanguage'], value: next as never },
+      { op: 'set', path: ['outputLanguagePrompted'], value: true as never },
+    ])
+  }
+
+  /**
+   * Answer the first-entry prompt: store the chosen languages, or only record
+   * that the prompt was dismissed, so it never shows again either way.
+   * @param languages - the three windows' choices, or null for "later".
+   * @returns whether the write landed.
+   */
+  async answerOutputLanguagePrompt(languages: OutputLanguageSettings | null): Promise<boolean> {
+    const ops: { op: 'set'; path: string[]; value: never }[] = []
+    if (languages !== null) {
+      const next = outputLanguagesFromSection({ outputLanguage: languages })
+      ops.push({ op: 'set', path: ['outputLanguage'], value: next as never })
+    }
+    ops.push({ op: 'set', path: ['outputLanguagePrompted'], value: true as never })
+    return this.commit(ops)
+  }
+
+  /**
+   * Persist one Workspace's turn prompt; blank text removes it.
+   * @param root - the Workspace's root path.
+   * @param prompt - the text, verbatim; over the limit is refused without writing.
+   * @returns whether the write landed.
+   */
+  async saveWorkspacePrompt(root: string, prompt: string): Promise<boolean> {
+    let next: WorkspacePromptEntry[]
+    try {
+      next = withWorkspacePrompt(this.store.getSnapshot().workspacePrompts, root, prompt)
+    } catch (error) {
+      this.reportError(error)
+      return false
+    }
+    return this.commit([{ op: 'set', path: ['workspacePrompts'], value: next as never }])
   }
 
   private reportError(error: unknown): void {
@@ -305,15 +370,13 @@ export class ReviewSettingsController {
   /**
    * Write one patch against the revision the editor was filled from. The Host
    * validates it against the row's Config, including the reviewer-table checks.
-   * @param value - the section as it will read after the patch.
    * @param ops - the patch itself.
    * @param expectedRevision - revision for the compare-and-set.
    * @returns whether the write landed.
    */
   private async commit(
-    value: { reviewers: readonly ReviewerSettingsRow[]; perspective: string },
     ops: readonly { op: 'set'; path: string[]; value: never }[],
-    expectedRevision: number | undefined,
+    expectedRevision?: number,
   ): Promise<boolean> {
     const state = this.store.getSnapshot()
     if (!state.writable || this.saving) return false
@@ -361,6 +424,9 @@ export class ReviewSettingsController {
         state.writable = false
         state.reviewers = []
         state.perspective = ''
+        state.outputLanguage = { ...DEFAULT_OUTPUT_LANGUAGES }
+        state.outputLanguagePrompted = false
+        state.workspacePrompts = []
       })
       return
     }
@@ -374,6 +440,9 @@ export class ReviewSettingsController {
       state.revision = snapshot.revision ?? 0
       state.reviewers = rowsFromValue(value)
       state.perspective = perspectiveFromSection(value)
+      state.outputLanguage = outputLanguagesFromSection(value)
+      state.outputLanguagePrompted = outputLanguagePromptedFromSection(value)
+      state.workspacePrompts = workspacePromptsFromSection(value)
     })
   }
 }

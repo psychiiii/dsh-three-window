@@ -22,7 +22,17 @@ A three-window workbench plugin for [DeepSeek Harness](https://github.com/deepse
 - **Anonymous multi-model review.** The review window runs every configured
   reviewer model on the same change, blind to each other, and returns one report
   with the verdict, all findings, and the ones only a single model raised.
-  Reviewer models are set in Settings → 窗口与评审.
+  Reviewer models are set with the review window's “Review models” button (the
+  window stays locked until at least one is set; a single one runs an ordinary
+  single-model review). The review perspective is edited in Settings → Windows & review.
+- **Model output language.** Each window can have its own language for the
+  model's answers to you (Settings → General; you are also asked once on first
+  entry). It governs only what the model says to you: code, comments, and commit
+  messages keep following the project.
+- **Per-workspace turn prompt.** In the workspace list, ⋯ → “Turn prompt…” sets a
+  text that is appended after every message in that workspace, in all three
+  windows. A 📌 beside the name marks a workspace that has one and previews it on
+  hover. It is stored only in this machine's dsh settings, never in the project.
 
 ## Install
 

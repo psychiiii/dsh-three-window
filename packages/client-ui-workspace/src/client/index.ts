@@ -24,7 +24,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@psychiiii/dsh-three-window-workbench/client'
-import type { WindowsSnapshot, WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
+import {
+  NO_WORKSPACE_PROMPTS,
+  type WindowsSnapshot, type WorkspaceBrowserInjected, type WorkspacePickerInjected, type WorkspacePromptsView,
+} from './contract/slots.ts'
 import { NO_WINDOWS } from './tree.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
@@ -36,7 +39,9 @@ export type { UiWorkspace } from './navigation.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
   WorkspaceBrowserInjected, WorkspaceBrowserProps, WorkspacePickerInjected, WorkspacePickerProps,
+  WorkspacePromptsView,
 } from './contract/slots.ts'
+export { NO_WORKSPACE_PROMPTS } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -78,6 +83,17 @@ interface WorkbenchWindows {
 }
 
 const INACTIVE_WINDOWS: WindowsSnapshot = { ...NO_WINDOWS, limitPrompt: undefined }
+
+/**
+ * The part of the settings package's `workspacePrompts` service the list
+ * reads, typed here so neither package imports the other; absent in
+ * compositions without it.
+ */
+interface WorkspacePromptsSource {
+  getSnapshot(): Omit<WorkspacePromptsView, 'available'>
+  subscribe(listener: () => void): () => void
+  save(root: string, prompt: string): Promise<boolean>
+}
 
 function requireWorkbench(ctx: Context): WorkbenchWindows {
   const workbench = ctx.get('workbench') as WorkbenchWindows | undefined
@@ -148,6 +164,35 @@ export function apply(ctx: Context): void {
     }
     return windowsSnapshot
   }
+  // The settings package may register its service before or after this
+  // plugin applies, so reads are live and a subscription follows the
+  // service's arrival and replacement through `internal/service`.
+  const promptsSource = (): WorkspacePromptsSource | undefined =>
+    ctx.get('workspacePrompts') as WorkspacePromptsSource | undefined
+  let promptsFrom: object | undefined
+  let promptsView: WorkspacePromptsView = NO_WORKSPACE_PROMPTS
+  const readPrompts = (): WorkspacePromptsView => {
+    const source = promptsSource()
+    if (source === undefined) return NO_WORKSPACE_PROMPTS
+    const snapshot = source.getSnapshot()
+    if (snapshot === promptsFrom) return promptsView
+    promptsFrom = snapshot
+    promptsView = { ...snapshot, available: true }
+    return promptsView
+  }
+  const subscribePrompts = (listener: () => void): () => void => {
+    let inner = promptsSource()?.subscribe(listener)
+    const off = ctx.on('internal/service', (name) => {
+      if (name !== 'workspacePrompts') return
+      inner?.()
+      inner = promptsSource()?.subscribe(listener)
+      listener()
+    })
+    return () => {
+      off()
+      inner?.()
+    }
+  }
   const openSession: WorkspaceBrowserInjected['open'] = (sessionId) => {
     uiWorkspace.openSession(sessionId)
   }
@@ -174,6 +219,10 @@ export function apply(ctx: Context): void {
         })
     },
     renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
+    saveWorkspacePrompt: async (root, prompt) => {
+      const source = promptsSource()
+      return source === undefined ? false : source.save(root, prompt)
+    },
     deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {
       await workspaces.insertBefore(workspaceId, beforeWorkspaceId)
@@ -198,6 +247,7 @@ export function apply(ctx: Context): void {
     hooks: {
       directoryFlow: browserFlowSource,
       hostInfo,
+      workspacePrompts: { getSnapshot: readPrompts, subscribe: subscribePrompts },
       windows: {
         getSnapshot: readWindows,
         subscribe: (listener) => {

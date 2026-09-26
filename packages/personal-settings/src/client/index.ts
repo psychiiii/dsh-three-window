@@ -1,10 +1,11 @@
 /**
- * Client plugin: the review debate dock in `conversation.input.dock`, and the
- * 「窗口与评审」 page in `settings.section`.
+ * Client plugin: the review debate dock in `conversation.input.dock`, the
+ * 「窗口与评审」 page in `settings.section`, one model-output-language row per
+ * window in `settings.general.item`, the first-entry language prompt, and the
+ * `workspacePrompts` service the Workspace list's per-Workspace editor uses.
  *
- * Both surfaces read the one `personal-review` settings namespace through one
- * controller, so the review-model list and the perspective are never two
- * sources of the same setting.
+ * Every surface reads the one `personal-settings` Config section through one
+ * controller, so no setting has two sources.
  * @module @psychiiii/dsh-three-window-settings/client
  */
 
@@ -25,6 +26,10 @@ import { ReviewSettingsController } from './settings-store.ts'
 import { WorkspaceHooksController, type SessionCatalog } from './workspace-hooks-store.ts'
 import { WindowReviewSection } from './WindowReviewSection.tsx'
 import type { WindowReviewInjected } from './WindowReviewSection.tsx'
+import { OutputLanguageRow, type OutputLanguageRowInjected } from './OutputLanguageRow.tsx'
+import { OutputLanguagePrompt, type OutputLanguagePromptInjected } from './OutputLanguagePrompt.tsx'
+import { OUTPUT_LANGUAGE_WINDOWS } from '@psychiiii/dsh-three-window-review/output-language'
+import { WorkspacePromptsService } from './workspace-prompts.ts'
 import { en, zh, type ReviewKey } from './locales.ts'
 
 export type { ReviewKey } from './locales.ts'
@@ -32,6 +37,11 @@ export { ReviewDock } from './ReviewDock.tsx'
 export type { ReviewDockInjected } from './ReviewDock.tsx'
 export { ReviewSettingsController } from './settings-store.ts'
 export { WindowReviewSection } from './WindowReviewSection.tsx'
+export { OutputLanguageRow, OutputLanguageSelector } from './OutputLanguageRow.tsx'
+export type { OutputLanguageRowInjected, OutputLanguageRowProps } from './OutputLanguageRow.tsx'
+export { OutputLanguagePrompt } from './OutputLanguagePrompt.tsx'
+export { WorkspacePromptsService, type WorkspacePromptsSnapshot } from './workspace-prompts.ts'
+export type { OutputLanguagePromptInjected, OutputLanguagePromptProps } from './OutputLanguagePrompt.tsx'
 export type { WindowReviewInjected, WindowReviewSectionProps } from './WindowReviewSection.tsx'
 export { WorkspaceHooksController, joinHostPath, HOOKS_DIR_SEGMENTS, SELECTION_STORAGE_KEY } from './workspace-hooks-store.ts'
 export type { HooksState, ProjectOption, SessionCatalog } from './workspace-hooks-store.ts'
@@ -60,6 +70,7 @@ export function apply(ctx: ClientContext): void {
   const controller = new ReviewSettingsController(
     ctx.configForms.get<ReviewSettings>(REVIEW_SETTINGS_ENTRY), ctx)
   ctx.effect(() => () => { controller.dispose() }, 'personal-review: settings controller')
+  new WorkspacePromptsService(ctx, controller)
   const composerLock = createReviewComposerLock(
     () => (ctx.get('conversation') as { blocks?: ComposerBlocks } | undefined)?.blocks)
   ctx.effect(() => () => { composerLock.dispose() }, 'personal-review: review composer lock')
@@ -98,6 +109,45 @@ export function apply(ctx: ClientContext): void {
     loadHooks: path => hooks.load(path),
     defaultPerspective: DEFAULT_PERSPECTIVE,
   })
+
+  // Settings → General: dsh's Language row is order 0, and 1–9 are free on
+  // every supported host, so the three windows' rows sit right after it.
+  OUTPUT_LANGUAGE_WINDOWS.forEach((window, index) => {
+    const rowInjected = (): OutputLanguageRowInjected => ({
+      hooks: { reviewSettings: controller.store },
+      window,
+      loadSettings: () => controller.load(),
+      saveOutputLanguage: (target, tag) => controller.saveOutputLanguage(target, tag),
+    })
+    ctx.slots.inject('settings.general.item', () =>
+      ctx.slots.register(
+        {
+          name: 'settings.general.item',
+          id: `personal-output-language-${window}`,
+          order: 1 + index,
+          locale: NS,
+          inject: rowInjected,
+        },
+        OutputLanguageRow,
+      ))
+  })
+
+  const promptInjected = (): OutputLanguagePromptInjected => ({
+    hooks: { reviewSettings: controller.store },
+    loadSettings: () => controller.load(),
+    answerOutputLanguagePrompt: languages => controller.answerOutputLanguagePrompt(languages),
+  })
+  ctx.slots.inject('conversation.input.dock', () =>
+    ctx.slots.register(
+      {
+        name: 'conversation.input.dock',
+        id: 'personal-output-language-prompt',
+        order: 16,
+        locale: NS,
+        inject: promptInjected,
+      },
+      OutputLanguagePrompt,
+    ))
 
   // Ordered between the agent-preset roster (20) and archived sessions (25):
   // the three windows are three presets, and this page configures what they

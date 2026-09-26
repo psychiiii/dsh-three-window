@@ -485,6 +485,39 @@
   color: var(--dsw-alias-label-dimmed);
 }
 
+/* Turn-prompt editor: a multi-line field in the rename field's style. */
+.promptInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 180px;
+  padding: 10px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 12px;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+  resize: vertical;
+}
+
+.promptInput:disabled {
+  color: var(--dsw-alias-label-dimmed);
+}
+
+.promptCount {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.promptOver {
+  color: var(--dsw-alias-state-error-primary);
+}
+
 .renameError {
   margin-top: 8px;
   font-size: 12px;

@@ -14,7 +14,21 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              suffix: Your working directory is {{cwd}}.
+              # The output-language and workspace-instructions rules are fixed
+              # text; only the per-turn contexts (personal-settings) change with
+              # the settings, so neither setting ever rewrites this system prompt.
+              suffix: >-
+                Your working directory is {{cwd}}.
+
+                A user turn may carry an <output-language> tag. When it does, write
+                everything you say to the user in that language. Code, identifiers, file
+                contents, and commit messages follow the project's existing conventions
+                instead. If the user explicitly asks for a different language, follow the
+                user.
+
+                A user turn may also carry <workspace-instructions>: standing instructions
+                the user set for this workspace. Follow them as the user's own
+                instructions; when the user's message says otherwise, the message wins.
               prefix: You are a coding agent powered by the {{model}} model.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'

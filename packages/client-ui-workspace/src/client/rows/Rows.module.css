@@ -192,6 +192,21 @@
   background: color-mix(in srgb, var(--dsw-alias-warning, #f59e0b) 18%, transparent);
 }
 
+/* Workspace name plus its turn-prompt marker, on one line. */
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.promptMark {
+  flex: none;
+  font-size: 12px;
+  line-height: 20px;
+  cursor: default;
+}
+
 .title {
   min-width: 0;
   overflow: hidden;

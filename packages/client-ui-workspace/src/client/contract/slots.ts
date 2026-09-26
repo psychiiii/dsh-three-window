@@ -120,6 +120,42 @@ export type DirectoryPickingInjected = {
 export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']>
 
 /**
+ * Per-Workspace turn prompts as the list reads them. Supplied by the settings
+ * package's `workspacePrompts` service; without it the list sees
+ * {@link NO_WORKSPACE_PROMPTS} and offers no entry.
+ */
+export interface WorkspacePromptsView {
+  /** False when no settings package supplies the prompts: no menu entry, no marker. */
+  readonly available: boolean
+  /** True once the stored prompts are known. */
+  readonly ready: boolean
+  /** Whether this page may write settings. */
+  readonly writable: boolean
+  /** Whether a write is in flight. */
+  readonly saving: boolean
+  /** The last refusal, or null. */
+  readonly error: string | null
+  /** Longest prompt, in characters. */
+  readonly limit: number
+  /** That Workspace's prompt, by root path, or undefined. */
+  promptOf(root: string): string | undefined
+  /** Rough per-turn token estimate for the editor's hint. */
+  estimateTokens(text: string): number
+}
+
+/** The view without a settings package. */
+export const NO_WORKSPACE_PROMPTS: WorkspacePromptsView = Object.freeze({
+  available: false,
+  ready: false,
+  writable: false,
+  saving: false,
+  error: null,
+  limit: 0,
+  promptOf: () => undefined,
+  estimateTokens: () => 0,
+})
+
+/**
  * Browser-private injected share (arrives via the register inject factory).
  * Data reads use the global framework hooks; these are the Host actions the
  * browsing region drives.
@@ -139,6 +175,8 @@ export type WorkspaceBrowserInjected = {
      * without a workbench it is a constant inactive view.
      */
     windows: HostObservable<WindowsSnapshot>
+    /** Each Workspace's turn prompt; a constant unavailable view without the settings package. */
+    workspacePrompts: HostObservable<WorkspacePromptsView>
   }
   /**
    * Create a window of pane kind `index` in a Workspace through the workbench's
@@ -192,6 +230,8 @@ export type WorkspaceBrowserInjected = {
   forkSession: (sessionId: SessionId) => void
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */
   renameWorkspace: (workspaceId: WorkspaceId, title: string) => Promise<void>
+  /** Store one Workspace's turn prompt by root path; blank removes it. Resolves false when refused. */
+  saveWorkspacePrompt: (root: string, prompt: string) => Promise<boolean>
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
   deleteWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /**

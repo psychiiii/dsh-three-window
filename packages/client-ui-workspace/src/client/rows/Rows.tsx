@@ -11,7 +11,7 @@ import clsx from 'clsx'
 import {
   HoverCard, IconAlarmClockOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular,
   IconEditOutlineRegular, IconEllipsisOutlineRegular, IconFolderCloseRegular, IconFolderOpenRegular,
-  IconPlusOutlineRegular, IconTrashOutlineRegular, IconTriangleRightFillRegular, Menu, relativeTime,
+  IconPinOutlineRegular, IconPlusOutlineRegular, IconTrashOutlineRegular, IconTriangleRightFillRegular, Menu, relativeTime,
   StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -155,9 +155,23 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
+/** Characters of a turn prompt the 📌 tooltip shows before it elides. */
+export const PROMPT_PREVIEW_CHARS = 60
+
+/**
+ * The 📌 tooltip: the prompt's first characters on one line.
+ * @param prompt - the stored prompt.
+ * @returns at most {@link PROMPT_PREVIEW_CHARS} characters, then an ellipsis.
+ */
+export function promptPreviewText(prompt: string): string {
+  const flat = prompt.replace(/\s+/gu, ' ').trim()
+  const chars = [...flat]
+  return chars.length > PROMPT_PREVIEW_CHARS ? `${chars.slice(0, PROMPT_PREVIEW_CHARS).join('')}…` : flat
+}
+
 export function ProjectRowItem({
   group, containsCurrentDescendant = false, onToggle, onActivate, focused = false, onCreate, onCreateWindow,
-  actions, drag, home, t,
+  actions, drag, home, promptPreview, t,
 }: {
   group: GroupNode
   containsCurrentDescendant?: boolean
@@ -166,8 +180,13 @@ export function ProjectRowItem({
   focused?: boolean
   onCreate: () => void
   onCreateWindow?: ((index: 0 | 1 | 2) => void) | undefined
-  /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void } | undefined
+  /**
+   * Real-Workspace actions; absent for the ungrouped bucket (no menu shown).
+   * `prompt` is present only when a settings package supplies turn prompts.
+   */
+  actions?: { rename: () => void; delete: () => void; prompt?: (() => void) | undefined } | undefined
+  /** This Workspace's turn prompt, when it has one: shown as a 📌 whose tooltip previews it. */
+  promptPreview?: string | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -182,6 +201,9 @@ export function ProjectRowItem({
   const [windowMenuOpen, setWindowMenuOpen] = useState(false)
   const workspaceMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutlineRegular /> },
+    ...actions?.prompt === undefined
+      ? []
+      : [{ id: 'prompt', label: t('menu.workspacePrompt'), icon: <IconPinOutlineRegular /> }],
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutlineRegular />, danger: true },
   ]
   const ownRow = (
@@ -223,7 +245,19 @@ export function ProjectRowItem({
           </button>
         )}
       <span className={css.projectText}>
-        <span className={css.title}>{label}</span>
+        <span className={css.titleLine}>
+          <span className={css.title}>{label}</span>
+          {promptPreview !== undefined && (
+            <span
+              className={css.promptMark}
+              title={promptPreviewText(promptPreview)}
+              aria-label={t('prompt.mark.aria', { preview: promptPreviewText(promptPreview) })}
+              data-workspace-prompt-mark=""
+            >
+              📌
+            </span>
+          )}
+        </span>
       </span>
       <span className={css.rowActions}>
         {actions !== undefined && (
@@ -235,9 +269,10 @@ export function ProjectRowItem({
               setMenuOpen(false)
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
-              if (id !== 'rename' && id !== 'delete') return
+              /* v8 ignore next -- Menu can emit only the rows supplied above. */
+              if (id !== 'rename' && id !== 'delete' && id !== 'prompt') return
               if (id === 'rename') actions.rename()
+              else if (id === 'prompt') actions.prompt?.()
               else actions.delete()
             }}
             portal

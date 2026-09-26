@@ -60,6 +60,7 @@
     "@psychiiii/dsh-three-window-workbench": "*"
   },
   "devDependencies": {
+    "@testing-library/react": "*",
     "@types/react": "*",
     "clsx": "*",
     "react": "*",

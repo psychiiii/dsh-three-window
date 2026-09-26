@@ -5,12 +5,14 @@
  * One section of the user prompt is configurable: the perspective. The system
  * prompt, the framing sentence above the perspective, and the output protocol
  * are assembled from constants in this module and cannot be reached from
- * settings.
+ * settings. The review window's output language adds one fixed line, rendered
+ * from the language table, never from free text.
  * @module @psychiiii/dsh-three-window-review/prompts
  */
 
 import type { ResolvedBaseline } from './baseline.ts'
 import type { LabeledFinding } from './findings.ts'
+import { seatOutputLanguageLine } from './output-language.ts'
 
 /** System prompt sent to every seat on every round. */
 export const DEBATE_SYSTEM_PROMPT = [
@@ -70,6 +72,11 @@ function perspectiveBlock(perspective: string | undefined): string[] {
   return [PERSPECTIVE_PREFIX, resolvePerspective(perspective)]
 }
 
+function languageBlock(outputLanguage: string | undefined): string[] {
+  const line = seatOutputLanguageLine(outputLanguage)
+  return line === undefined ? [] : ['', line]
+}
+
 function roleBlock(role: string): string[] {
   return [`Your seat role is: ${role}.`]
 }
@@ -92,11 +99,13 @@ function baselineBlock(baseline: ResolvedBaseline): string[] {
  * @param role - configured reviewer role (`reviewer-N` or an explicit role).
  * @param baseline - resolved baseline for this run.
  * @param perspective - configured perspective; blank uses {@link DEFAULT_PERSPECTIVE}.
+ * @param outputLanguage - the review window's output language tag; blank adds nothing.
  */
 export function buildInitialUserPrompt(
   role: string,
   baseline: ResolvedBaseline,
   perspective?: string,
+  outputLanguage?: string,
 ): string {
   return [
     ...roleBlock(role),
@@ -105,6 +114,7 @@ export function buildInitialUserPrompt(
     '',
     'Output protocol (one JSON object, no fences):',
     INITIAL_PROTOCOL,
+    ...languageBlock(outputLanguage),
     '',
     ...baselineBlock(baseline),
   ].join('\n')
@@ -116,12 +126,14 @@ export function buildInitialUserPrompt(
  * @param baseline - the same frozen baseline as round 1.
  * @param labeled - previous-round findings labeled F1, F2, … .
  * @param perspective - configured perspective; blank uses {@link DEFAULT_PERSPECTIVE}.
+ * @param outputLanguage - the review window's output language tag; blank adds nothing.
  */
 export function buildChallengeUserPrompt(
   role: string,
   baseline: ResolvedBaseline,
   labeled: readonly LabeledFinding[],
   perspective?: string,
+  outputLanguage?: string,
 ): string {
   const claims = labeled.map(item => {
     const wordings = item.claims.map(claim => `    - ${claim.claim}`)
@@ -147,6 +159,7 @@ export function buildChallengeUserPrompt(
     '',
     'Output protocol (one JSON object, no fences). Every listed F-label must appear in verdicts exactly once:',
     CHALLENGE_PROTOCOL,
+    ...languageBlock(outputLanguage),
     '',
     ...baselineBlock(baseline),
   ].join('\n')

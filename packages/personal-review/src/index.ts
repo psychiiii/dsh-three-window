@@ -50,9 +50,12 @@ export {
   type ReviewSettings, type ReviewerSettingsRow,
 } from './reviewers.ts'
 export {
+  OutputLanguageSchema, OutputLanguageValueSchema, WorkspacePromptsSchema,
   ReviewSettingsConfig, ReviewerTableSchema, provideReviewSettings,
   type ReviewSettingsService,
 } from './settings.ts'
+export * from './output-language.ts'
+export * from './workspace-prompt.ts'
 
 export const name = 'personal-review'
 export const inject = ['tools', 'sessionProjections', 'llm', 'fs']
@@ -324,6 +327,7 @@ export function apply(ctx: Context, config: Config): void {
         timeoutMs,
         grouping,
         perspective: perspectiveFromSection(section),
+        outputLanguage: settings.outputLanguages().review,
         signal: exec.signal,
         complete: request => completeSeat(llm, request),
       })

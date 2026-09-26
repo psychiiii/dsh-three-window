@@ -21,6 +21,9 @@
       "@psychiiii/dsh-three-window-review": [
         "./packages/personal-review/src/index.ts"
       ],
+      "@psychiiii/dsh-three-window-review/output-language": [
+        "./packages/personal-review/src/output-language.ts"
+      ],
       "@psychiiii/dsh-three-window-review/prompts": [
         "./packages/personal-review/src/prompts.ts"
       ],
@@ -32,6 +35,9 @@
       ],
       "@psychiiii/dsh-three-window-review/settings": [
         "./packages/personal-review/src/settings.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/workspace-prompt": [
+        "./packages/personal-review/src/workspace-prompt.ts"
       ],
       "@psychiiii/dsh-three-window-review/types": [
         "./packages/personal-review/src/types.ts"

@@ -46,6 +46,11 @@ export interface DebateInput {
    * receive exactly one perspective section.
    */
   readonly perspective: string
+  /**
+   * The review window's output language tag. Blank or absent adds nothing;
+   * a tag adds one fixed line about the natural-language fields.
+   */
+  readonly outputLanguage?: string
   readonly signal: AbortSignal
   readonly complete: DebateCompleter
 }
@@ -162,8 +167,8 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
     const roundStarted = Date.now()
     const outcomes = await mapPool(input.seats, input.maxParallel, async (seat, index) => {
       const user = mode === 'initial'
-        ? buildInitialUserPrompt(seat.role, input.baseline, input.perspective)
-        : buildChallengeUserPrompt(seat.role, input.baseline, promptLabeled, input.perspective)
+        ? buildInitialUserPrompt(seat.role, input.baseline, input.perspective, input.outputLanguage)
+        : buildChallengeUserPrompt(seat.role, input.baseline, promptLabeled, input.perspective, input.outputLanguage)
       roundPrompts[index] = {
         round,
         seatId: seat.seatId,

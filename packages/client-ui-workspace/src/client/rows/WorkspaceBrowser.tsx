@@ -20,7 +20,7 @@ import type {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import type { WorkspaceBrowserProps, WorkspacePromptsView } from '../contract/slots.ts'
 import type { GroupNode, SessionNode, SessionOrderBy, WindowsView } from '../tree.ts'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
@@ -239,6 +239,10 @@ type SessionTreeProps = Pick<
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
+  /** Each Workspace's turn prompt; `available` false hides the menu entry and the marker. */
+  prompts: WorkspacePromptsView
+  /** Open the browser-owned turn-prompt editor for a Workspace root. */
+  onPromptRequest: (root: string, title: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
@@ -264,6 +268,7 @@ function SessionTree({
   archivedSessionIds,
   workspaceReady, usePanelInfo,
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
+  prompts, onPromptRequest,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
   setSessionOrder, home, renderSlot, t,
@@ -594,7 +599,11 @@ function SessionTree({
               /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                 if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
               },
+              prompt: prompts.available && group.cwd !== undefined
+                ? () => { if (group.cwd !== undefined) onPromptRequest(group.cwd, group.label) }
+                : undefined,
             }}
+          promptPreview={prompts.available && group.cwd !== undefined ? prompts.promptOf(group.cwd) : undefined}
         />
         {group.expanded && children.length > 0 && (
           <div role="group">
@@ -912,6 +921,8 @@ export function WorkspaceBrowser({
   useDirectoryFlow,
   useHostInfo,
   useWindows,
+  useWorkspacePrompts,
+  saveWorkspacePrompt,
   createWindow,
   restorePast,
   planAdoption,
@@ -924,6 +935,7 @@ export function WorkspaceBrowser({
 }: WorkspaceBrowserProps) {
   const home = useHostInfo(info => info.home)
   const windows = useWindows(snapshot => snapshot)
+  const prompts = useWorkspacePrompts(snapshot => snapshot)
   // Ordering remains live while the rail or search replaces the list body.
   const list = useSessions(state => state)
   const workspaces = useWorkspaces(state => state.items)
@@ -1205,6 +1217,35 @@ export function WorkspaceBrowser({
     }).catch((reason: unknown) => {
       setRenaming(false)
       setRenameError(reason instanceof Error ? reason.message : String(reason))
+    })
+  }
+
+  // Turn-prompt editor (browser-owned like rename). Blank text clears the
+  // Workspace's prompt; over the limit cannot be saved.
+  const [promptTarget, setPromptTarget] = useState<{ root: string; title: string } | null>(null)
+  const [promptDraft, setPromptDraft] = useState('')
+  const [promptSaving, setPromptSaving] = useState(false)
+  const [promptError, setPromptError] = useState<string | null>(null)
+  const promptStored = promptTarget === null ? '' : prompts.promptOf(promptTarget.root) ?? ''
+  const promptOver = promptDraft.length > prompts.limit
+  const promptBlocked = promptTarget === null || promptSaving || !prompts.writable || promptOver
+    || promptDraft === promptStored
+  const closePrompt = () => {
+    if (promptSaving) return
+    setPromptTarget(null)
+    setPromptError(null)
+  }
+  const commitPrompt = (text: string) => {
+    if (promptTarget === null || promptSaving || !prompts.writable || text.length > prompts.limit) return
+    setPromptSaving(true)
+    setPromptError(null)
+    saveWorkspacePrompt(promptTarget.root, text).then((accepted) => {
+      setPromptSaving(false)
+      if (accepted) setPromptTarget(null)
+      else setPromptError(t('prompt.refused'))
+    }).catch((reason: unknown) => {
+      setPromptSaving(false)
+      setPromptError(reason instanceof Error ? reason.message : String(reason))
     })
   }
 
@@ -1495,6 +1536,12 @@ export function WorkspaceBrowser({
                   setDeleteTarget({ workspaceId, title })
                   setDeleteError(null)
                 }}
+                prompts={prompts}
+                onPromptRequest={(root, title) => {
+                  setPromptTarget({ root, title })
+                  setPromptDraft(prompts.promptOf(root) ?? '')
+                  setPromptError(null)
+                }}
               />
             ))}
       </div>
@@ -1532,6 +1579,64 @@ export function WorkspaceBrowser({
           <div className={css.renameError} role="alert">{t('conflict.named', { name: renameTrimmed })}</div>
         )}
         {renameError !== null && <div className={css.renameError} role="alert">{renameError}</div>}
+      </Modal>
+
+      <Modal
+        open={promptTarget !== null}
+        onClose={closePrompt}
+        closeLabel={t('close')}
+        title={t('prompt.title', { name: promptTarget?.title ?? '' })}
+        description={t('prompt.description')}
+        footer={(
+          <>
+            <Button
+              variant="ghost"
+              disabled={promptSaving || !prompts.writable || promptStored === ''}
+              data-workspace-prompt-clear=""
+              onClick={() => { commitPrompt('') }}
+            >
+              {t('prompt.clear')}
+            </Button>
+            <Button variant="outline" disabled={promptSaving} onClick={closePrompt}>{t('cancel')}</Button>
+            <Button
+              variant="primary"
+              disabled={promptBlocked}
+              data-workspace-prompt-save=""
+              onClick={() => { commitPrompt(promptDraft) }}
+            >
+              {promptSaving ? t('prompt.saving') : t('prompt.save')}
+            </Button>
+          </>
+        )}
+      >
+        <textarea
+          className={css.promptInput}
+          value={promptDraft}
+          aria-label={t('prompt.field')}
+          placeholder={t('prompt.placeholder')}
+          rows={10}
+          autoFocus
+          disabled={promptSaving || !prompts.writable}
+          data-workspace-prompt-input=""
+          onChange={(e) => { setPromptDraft(e.target.value); setPromptError(null) }}
+        />
+        <div
+          className={clsx(css.promptCount, promptOver && css.promptOver)}
+          data-workspace-prompt-count=""
+          data-workspace-prompt-over={promptOver ? 'true' : undefined}
+        >
+          {promptOver
+            ? t('prompt.over', { n: String(promptDraft.length), limit: String(prompts.limit) })
+            : t('prompt.count', {
+              n: String(promptDraft.length),
+              limit: String(prompts.limit),
+              tokens: String(prompts.estimateTokens(promptDraft)),
+            })}
+        </div>
+        {!prompts.writable && prompts.ready && (
+          <div className={css.renameError} role="alert">{t('prompt.readonly')}</div>
+        )}
+        {promptError !== null && <div className={css.renameError} role="alert">{promptError}</div>}
       </Modal>
 
       <Modal
