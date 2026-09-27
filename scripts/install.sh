@@ -20,10 +20,22 @@
 # 0.1.7-alpha.9 < 0.1.7-rc.1 < 0.1.7). The version is read from the package.json
 # of the package that owns the dsh executable (--dsh, else `dsh` on PATH); an
 # unreadable version is refused. --allow-unsupported-host installs anyway.
+#
+# Run in a terminal with no --install, --uninstall, or --check, it first shows
+# what it found (this package, the host, what is installed) and asks: 1 install
+# or update, 0 uninstall (after a y/N confirmation), x quit. Without a terminal,
+# or with one of those options, it runs without asking, as before.
+#
+# --uninstall removes the plugin from that profile instead: its registration,
+# its installed copy, and then the cache/dsh-three-window directory, in that
+# order. Sessions, Workspaces, and settings are dsh's own data and stay. It
+# needs no package and no supported host, so any build's installer removes any
+# build.
 set -eu
 
 PACKAGE_NAME='@psychiiii/dsh-three-window'
 PLUGIN_VERSION='@@PLUGIN_VERSION@@'
+RELEASE_VERSION='@@RELEASE_VERSION@@'
 TARBALL_SHA256='@@TARBALL_SHA256@@'
 TESTED_DSH_VERSION='@@DSH_VERSION@@'
 HOST_FLOOR='0.1.7-rc.1'
@@ -34,6 +46,8 @@ FROM=''
 DSH_BIN=''
 ALLOW_UNSUPPORTED=0
 CHECK=0
+UNINSTALL=0
+INSTALL=0
 
 say() { printf 'dsh-three-window: %s\n' "$*"; }
 
@@ -44,7 +58,8 @@ dsh-three-window installer
   curl -fsSLO https://github.com/psychiiii/dsh-three-window/releases/latest/download/dsh-three-window.sh
   sh dsh-three-window.sh [options]
 
-Running the same two lines again updates to the newest Release.
+Running the same two lines again updates to the newest Release. In a terminal,
+with none of --install, --uninstall, --check, it asks what to do.
 
 Options:
   --home DIR                 harness home (default: $DSH_HOME, else ~/.dsh)
@@ -52,12 +67,14 @@ Options:
   --from URL|PATH            tarball to install (default: the package embedded in this file)
   --dsh PATH                 dsh executable whose version is checked (default: dsh on PATH)
   --allow-unsupported-host   install even when the host is below the supported floor
-  --check                    run every check and write nothing
+  --install                  install or update without asking (the default without a terminal)
+  --uninstall                remove the plugin from the profile (sessions and settings stay)
+  --check                    run every check and write nothing (with --uninstall: list what would go)
   -h, --help                 print this text
 
 Installs one dsh-three-window tarball into one profile of one harness home,
 writing only under that home. The tarball must match the sha256 this installer
-was built with.
+was built with. Restart 'dsh web' after installing or uninstalling.
 USAGE
 }
 die() { printf 'dsh-three-window: error: %s\n' "$*" >&2; exit 1; }
@@ -70,10 +87,19 @@ while [ $# -gt 0 ]; do
     --dsh) [ $# -ge 2 ] || die '--dsh needs the path of the dsh executable'; DSH_BIN="$2"; shift 2 ;;
     --allow-unsupported-host) ALLOW_UNSUPPORTED=1; shift ;;
     --check) CHECK=1; shift ;;
+    --uninstall) UNINSTALL=1; shift ;;
+    --install) INSTALL=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
+
+[ $((INSTALL + UNINSTALL)) -le 1 ] || die '--install and --uninstall exclude each other'
+# Ask only when a person is there to answer and no action was named.
+MENU=0
+if [ "$INSTALL" -eq 0 ] && [ "$UNINSTALL" -eq 0 ] && [ "$CHECK" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
+  MENU=1
+fi
 
 PROFILE_DIR="$HOME_DIR/profiles/$PROFILE"
 MANIFEST="$PROFILE_DIR/package.json"
@@ -94,8 +120,9 @@ node -e '
     process.exit(1)
   }
 ' || exit 1
-# ── host version guard ────────────────────────────────────────────────────────
 [ -n "$DSH_BIN" ] || DSH_BIN="$(command -v dsh 2>/dev/null || true)"
+
+# ── host version (read only; the guard below acts on it) ──────────────────────
 HOST_VERSION=''
 if [ -n "$DSH_BIN" ]; then
   HOST_VERSION="$(node -e '
@@ -143,6 +170,164 @@ semver_order() {
 
 HOST_ORDER='invalid'
 [ -n "$HOST_VERSION" ] && HOST_ORDER="$(semver_order "$HOST_VERSION" "$HOST_FLOOR")"
+
+# ── menu (a terminal, no action named) ────────────────────────────────────────
+# installed_state prints "<build>|<release>|<registered>|<present>": the build
+# the manifest's file: spec names, the installed copy's release label, and
+# whether the manifest names the package and the copy exists (1 or 0).
+installed_state() {
+  node -e '
+    const fs = require("node:fs"), path = require("node:path")
+    const [manifestPath, installedDir, name] = process.argv.slice(1)
+    let spec = "", registered = 0
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+      spec = manifest.dependencies?.[name] ?? ""
+      registered = spec !== "" || (manifest.dsh?.profile?.bundles ?? []).includes(name) ? 1 : 0
+    } catch {}
+    const build = /dsh-three-window-(.+)\.tgz$/.exec(spec)?.[1] ?? ""
+    let release = "", present = 0
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(installedDir, "package.json"), "utf8"))
+      present = 1
+      release = pkg.dshThreeWindow?.release ?? pkg.version ?? ""
+    } catch {}
+    process.stdout.write([build, release, registered, present].join("|"))
+  ' "$MANIFEST" "$INSTALLED_DIR" "$PACKAGE_NAME"
+}
+if [ "$MENU" -eq 1 ]; then
+  printf '\ndsh-three-window 安装器\n'
+  printf '  本安装包：%s（构建 %s）\n' "$RELEASE_VERSION" "$(printf '%s' "$TARBALL_SHA256" | cut -c1-12)"
+  CAN_INSTALL=1
+  if [ "$HOST_ORDER" = invalid ] || [ "$HOST_ORDER" = -1 ]; then
+    printf '  dsh：%s，不支持（需要 %s 或更新的 rc）\n' "${HOST_VERSION:-未找到}" "$HOST_FLOOR"
+    CAN_INSTALL=0
+  else
+    printf '  dsh：%s（%s），支持\n' "$HOST_VERSION" "$DSH_BIN"
+  fi
+  printf '  位置：%s，profile %s\n' "$HOME_DIR" "$PROFILE"
+  if [ ! -f "$MANIFEST" ]; then
+    printf '  当前：profile 还没有初始化（先运行一次 dsh web）\n'
+    CAN_INSTALL=0
+    STATE='|||'
+  else
+    STATE="$(installed_state)"
+  fi
+  S_BUILD="${STATE%%|*}"; REST="${STATE#*|}"
+  S_RELEASE="${REST%%|*}"; REST="${REST#*|}"
+  S_REGISTERED="${REST%%|*}"; S_PRESENT="${REST#*|}"
+  INSTALL_LABEL='安装'
+  CAN_UNINSTALL=0
+  if [ -f "$MANIFEST" ]; then
+    if [ "$S_REGISTERED" = 1 ] || [ "$S_PRESENT" = 1 ] || [ -e "$CACHE_DIR" ]; then CAN_UNINSTALL=1; fi
+    if [ "$S_REGISTERED" = 1 ] && [ "$S_PRESENT" = 1 ]; then
+      S_SHA="$(printf '%s' "$S_BUILD" | sed 's/.*-//')"
+      printf '  当前已装：%s（构建 %s）\n' "${S_RELEASE:-未知版本}" "${S_SHA:-未知}"
+      if [ "$S_BUILD" = "$BUILD_ID" ]; then
+        INSTALL_LABEL="重新安装（已是 $RELEASE_VERSION）"
+      else
+        INSTALL_LABEL="更新到 $RELEASE_VERSION"
+      fi
+    elif [ "$S_REGISTERED" = 1 ] || [ "$S_PRESENT" = 1 ]; then
+      printf '  当前：安装不完整（登记与文件不一致），选 1 修复\n'
+      INSTALL_LABEL="修复安装 $RELEASE_VERSION"
+    else
+      printf '  当前：未安装\n'
+    fi
+  fi
+  printf '\n'
+  if [ "$CAN_INSTALL" -eq 1 ]; then printf '  [1] %s\n' "$INSTALL_LABEL"; else printf '  [1] %s（不可用，见上）\n' "$INSTALL_LABEL"; fi
+  if [ "$CAN_UNINSTALL" -eq 1 ]; then printf '  [0] 卸载\n'; else printf '  [0] 卸载（未安装，不可用）\n'; fi
+  printf '  [x] 退出\n'
+  while :; do
+    printf '请选择 [1/0/x]: '
+    if ! IFS= read -r CHOICE; then printf '\n'; say 'no answer: nothing was changed'; exit 0; fi
+    case "$CHOICE" in
+      1) [ "$CAN_INSTALL" -eq 1 ] && { INSTALL=1; break; }; printf '  现在不能安装，原因见上。\n' ;;
+      0) [ "$CAN_UNINSTALL" -eq 1 ] && { UNINSTALL=1; break; }; printf '  没有可卸载的内容。\n' ;;
+      x|X|q|Q) say 'quit: nothing was changed'; exit 0 ;;
+      *) printf '  请输入 1、0 或 x。\n' ;;
+    esac
+  done
+fi
+# ── uninstall ─────────────────────────────────────────────────────────────────
+if [ "$UNINSTALL" -eq 1 ]; then
+  [ -z "$FROM" ] || die '--uninstall takes no --from'
+  [ -f "$MANIFEST" ] || die "profile '$PROFILE' is not initialized at $PROFILE_DIR; nothing to uninstall (pass --home/--profile for another one)"
+  # registered_in prints where the manifest still names the package: "dependencies", "bundles", both, or nothing.
+  registered_in() {
+    node -e '
+      const fs = require("node:fs")
+      const [manifestPath, name] = process.argv.slice(1)
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+      const places = []
+      if (Object.hasOwn(manifest.dependencies ?? {}, name)) places.push("dependencies")
+      if ((manifest.dsh?.profile?.bundles ?? []).includes(name)) places.push("bundles")
+      process.stdout.write(places.join(" "))
+    ' "$MANIFEST" "$PACKAGE_NAME"
+  }
+  REGISTERED="$(registered_in)"
+  if [ -z "$REGISTERED" ] && [ ! -e "$INSTALLED_DIR" ] && [ ! -e "$CACHE_DIR" ]; then
+    say "not installed in profile '$PROFILE' of $HOME_DIR: nothing to do"
+    exit 0
+  fi
+  if command -v pnpm >/dev/null 2>&1 && [ -n "$DSH_BIN" ] && [ -n "$REGISTERED" ]; then
+    UROUTE='pnpm'
+  else
+    UROUTE='copy'
+  fi
+  say "uninstalling from home $HOME_DIR, profile $PROFILE"
+  [ -z "$REGISTERED" ] || say "1. remove $PACKAGE_NAME from $REGISTERED in $MANIFEST"
+  [ ! -e "$INSTALLED_DIR" ] || say "2. delete $INSTALLED_DIR"
+  [ ! -e "$CACHE_DIR" ] || say "3. delete $CACHE_DIR"
+  if [ "$UROUTE" = pnpm ]; then
+    say "route: pnpm found — step 1 and 2 through '$DSH_BIN plugin --profile $PROFILE remove $PACKAGE_NAME'"
+  else
+    say 'route: edit the manifest and delete the directories directly'
+  fi
+  say 'sessions, workspaces, and settings are dsh data and stay'
+  if [ "$CHECK" -eq 1 ]; then
+    say 'check only: nothing was removed'
+    exit 0
+  fi
+  if [ "$MENU" -eq 1 ]; then
+    printf '确认卸载？会话、工作区和设置都保留。[y/N]: '
+    IFS= read -r CONFIRM || CONFIRM=''
+    case "$CONFIRM" in
+      y|Y|yes|YES) ;;
+      *) say 'cancelled: nothing was removed'; exit 0 ;;
+    esac
+  fi
+  # A running dsh web keeps what it loaded until it restarts; it holds no lock to tell by, so this only warns.
+  if ps -eo args 2>/dev/null | grep -E '(^|/)dsh(\.js)?( .*)? web( |$)|bin\.js( .*)? web( |$)' | grep -v grep >/dev/null 2>&1; then
+    say "note: a 'dsh web' process is running; restart it after this to load dsh without the plugin"
+  fi
+  # Step 1 first: a profile that still names file:<cache>/… fails its next pnpm install once the cache is gone.
+  if [ "$UROUTE" = pnpm ]; then
+    DSH_HOME="$HOME_DIR" "$DSH_BIN" plugin --profile "$PROFILE" remove "$PACKAGE_NAME" \
+      || die "'dsh plugin remove' failed; nothing under $CACHE_DIR was deleted"
+  fi
+  if [ -n "$(registered_in)" ]; then
+    node -e '
+      const fs = require("node:fs")
+      const [manifestPath, name] = process.argv.slice(1)
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+      if (manifest.dependencies) delete manifest.dependencies[name]
+      if (manifest.dsh?.profile?.bundles) manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(b => b !== name)
+      const temp = manifestPath + ".dsh-three-window.tmp"
+      fs.writeFileSync(temp, JSON.stringify(manifest, null, 2) + "\n")
+      fs.renameSync(temp, manifestPath)
+    ' "$MANIFEST" "$PACKAGE_NAME"
+  fi
+  [ -z "$(registered_in)" ] || die "$MANIFEST still names $PACKAGE_NAME; nothing under $CACHE_DIR was deleted"
+  rm -rf "$INSTALLED_DIR"
+  rm -rf "$CACHE_DIR"
+  say "uninstalled. Restart 'dsh web' for the profile '$PROFILE'; it starts without the plugin."
+  say 'to install again, run dsh-three-window.sh without --uninstall'
+  exit 0
+fi
+
+# ── host version guard ────────────────────────────────────────────────────────
 if [ "$HOST_ORDER" = invalid ] || [ "$HOST_ORDER" = -1 ]; then
   cat >&2 <<GUARD
 dsh-three-window 需要 $HOST_FLOOR 或更新的 rc。
@@ -284,15 +469,32 @@ else
   say "copied into $INSTALLED_DIR and added $PACKAGE_NAME to dependencies and dsh.profile.bundles"
 fi
 
+# ── drop other builds from the cache ──────────────────────────────────────────
+# Only now that this build is registered; a build any profile of this home
+# still names (its manifest or lockfile) stays, or that profile's next pnpm
+# install would fail.
+for ENTRY in "$CACHE_DIR"/*; do
+  [ -e "$ENTRY" ] || continue
+  BASE="$(basename "$ENTRY")"
+  case "$BASE" in
+    "$BUILD_ID"|"dsh-three-window-$BUILD_ID.tgz") continue ;;
+  esac
+  OTHER="${BASE#dsh-three-window-}"; OTHER="${OTHER%.tgz}"
+  if grep -rqsF "dsh-three-window-$OTHER.tgz" "$HOME_DIR"/profiles/*/package.json "$HOME_DIR"/profiles/*/pnpm-lock.yaml 2>/dev/null; then
+    say "kept $ENTRY: a profile still names it"
+    continue
+  fi
+  rm -rf "$ENTRY"
+  say "removed an earlier build from the cache: $BASE"
+done
+
 # ── done ──────────────────────────────────────────────────────────────────────
 say "installed through the $ROUTE route. Restart 'dsh web' for the profile '$PROFILE' to load it."
 cat <<EOF
-dsh-three-window: to uninstall, in this order:
-  1. remove "$PACKAGE_NAME" from "dependencies" and from "dsh.profile.bundles" in
-     $MANIFEST
-  2. delete $INSTALLED_DIR
-  3. only then delete $CACHE_DIR
-     (step 1 first: a profile that still names file:$TARBALL fails its next pnpm install)
+dsh-three-window: to uninstall: sh dsh-three-window.sh --uninstall$( [ "$HOME_DIR" = "${DSH_HOME:-${HOME}/.dsh}" ] || printf ' --home %s' "$HOME_DIR" )$( [ "$PROFILE" = web ] || printf ' --profile %s' "$PROFILE" )
+  (by hand, in this order: 1. remove "$PACKAGE_NAME" from "dependencies" and from
+   "dsh.profile.bundles" in $MANIFEST; 2. delete $INSTALLED_DIR;
+   3. only then delete $CACHE_DIR)
 EOF
 # Nothing below this line is shell: the build appends the package here.
 exit 0

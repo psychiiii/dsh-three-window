@@ -49,20 +49,34 @@ dsh web
 ```
 
 The installer is one file with the plugin inside it; it checks its sha256 and your
-dsh version before changing anything.
+dsh version before changing anything. Run in a terminal, it first shows what it
+found (this package, your dsh, what is installed) and asks: `1` install or
+update, `0` uninstall (confirmed once more), `x` quit. Run from a script (no
+terminal), it installs without asking.
 
-**To update, run the same `curl` and `sh` lines again** — they always fetch the
-newest [Release](https://github.com/psychiiii/dsh-three-window/releases), and
-running them when you are already up to date changes nothing. Release versions
+**To update, run the same `curl` and `sh` lines again and choose `1`** — they
+always fetch the newest [Release](https://github.com/psychiiii/dsh-three-window/releases),
+and the earlier version's cached package is cleared on the way. Release versions
 follow official dsh releases (rc and stable only).
 
 <details>
 <summary>Uninstall</summary>
 
-In `~/.dsh/profiles/web/package.json`, remove `@psychiiii/dsh-three-window` from
-`dependencies` and from `dsh.profile.bundles`; then delete
-`~/.dsh/profiles/web/node_modules/@psychiiii/dsh-three-window` and, last,
-`~/.dsh/cache/dsh-three-window`.
+From the folder that holds the downloaded `dsh-three-window.sh`, run
+`sh dsh-three-window.sh` and choose `0`, or skip the menu:
+
+```sh
+sh dsh-three-window.sh --uninstall
+```
+
+Then restart `dsh web`: it starts as plain dsh. Sessions, workspaces, and
+settings stay. `--uninstall --check` lists what would be removed without
+removing it; running it again when nothing is installed changes nothing.
+
+By hand, in this order: in `~/.dsh/profiles/web/package.json`, remove
+`@psychiiii/dsh-three-window` from `dependencies` and from `dsh.profile.bundles`;
+then delete `~/.dsh/profiles/web/node_modules/@psychiiii/dsh-three-window` and,
+last, `~/.dsh/cache/dsh-three-window`.
 </details>
 
 <details>

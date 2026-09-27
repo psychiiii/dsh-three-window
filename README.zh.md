@@ -40,16 +40,27 @@ dsh web
 ```
 
 安装器是一个文件，插件就在里面；它会先校验 sha256 和你的 dsh 版本，再做任何改动。
+在终端里运行时，它先显示检测结果（本安装包版本、你的 dsh 版本、当前已装的版本），再让你选：
+`1` 安装或更新，`0` 卸载（会再确认一次），`x` 退出。在脚本里运行（没有终端）时不提问，直接安装。
 
-**更新：把同样的 `curl` 和 `sh` 两行再运行一遍即可**——它们总是取最新的
-[Release](https://github.com/psychiiii/dsh-three-window/releases)；已经是最新版时再运行也不会有任何改动。
+**更新：把同样的 `curl` 和 `sh` 两行再运行一遍、选 `1` 即可**——它们总是取最新的
+[Release](https://github.com/psychiiii/dsh-three-window/releases)；旧版本留下的安装包会顺带清掉。
 版本号跟随 dsh 官方 release（只跟 rc 和稳定版）。
 
 <details>
 <summary>卸载</summary>
 
-在 `~/.dsh/profiles/web/package.json` 的 `dependencies` 和 `dsh.profile.bundles` 里去掉
-`@psychiiii/dsh-three-window`；再删除 `~/.dsh/profiles/web/node_modules/@psychiiii/dsh-three-window`，
+在下载了 `dsh-three-window.sh` 的目录里运行 `sh dsh-three-window.sh` 选 `0`，或者不经菜单直接：
+
+```sh
+sh dsh-three-window.sh --uninstall
+```
+
+然后重启 `dsh web`，就是原版 dsh。会话、工作区和设置都保留。加 `--check` 只列出要删的内容、不删除；
+已经卸载过再运行不会有任何改动。
+
+手动卸载（顺序不能反）：在 `~/.dsh/profiles/web/package.json` 的 `dependencies` 和 `dsh.profile.bundles`
+里去掉 `@psychiiii/dsh-three-window`；再删除 `~/.dsh/profiles/web/node_modules/@psychiiii/dsh-three-window`，
 最后删除 `~/.dsh/cache/dsh-three-window`。
 </details>
 

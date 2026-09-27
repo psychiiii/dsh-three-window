@@ -291,6 +291,9 @@ writeJson(join(DIST, 'package.json'), {
   files: ['lib/**', 'src/**', 'presets/**', 'cordis.patch.yml', 'README.md', 'README.zh.md', 'LICENSE'],
   license: source.license,
   dsh: source.dsh,
+  // The Release label (`<version>` or `<version>-rN`): `version` must stay the
+  // baseline, so the installer's menu reads which Release is installed here.
+  dshThreeWindow: { release: releaseVersion },
   peerDependencies: Object.fromEntries(peers.map(name => [name, '*'])),
   peerDependenciesMeta: Object.fromEntries(peers.map(name => [name, { optional: true }])),
 })
@@ -406,6 +409,7 @@ for (const host of verifiedHosts) {
 const verifiedBound = verifiedHosts.map(host => host.version).reduce((a, b) => (semverOrder(a, b) >= 0 ? a : b))
 const installer = installerSource
   .replaceAll('@@PLUGIN_VERSION@@', baselineVersion)
+  .replaceAll('@@RELEASE_VERSION@@', releaseVersion)
   .replaceAll('@@TARBALL_SHA256@@', tarballHash)
   .replaceAll('@@DSH_VERSION@@', verifiedBound)
 if (installer.includes('@@')) fail('scripts/install.sh has a placeholder this script does not fill')
