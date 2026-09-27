@@ -6,6 +6,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkbenchInjected } from './service.ts'
 import { WORKBENCH_PANE_ROLES } from './windows.ts'
+import { PaneLanguageSelector } from './PaneLanguageSelector.tsx'
 import css from './WorkbenchPanel.module.css'
 
 /** Full composed props for the workbench occupant. */
@@ -25,12 +26,13 @@ export type WorkbenchPanelProps =
  * @returns the three-pane occupant.
  */
 export function WorkbenchPanel({
-  renderSlot, SessionProvider, useWorkbench, useSessions, focus, t,
+  renderSlot, SessionProvider, useWorkbench, useSessions, usePaneLanguages, saveOutputLanguage, focus, t,
 }: WorkbenchPanelProps): ReactNode {
   const panes = useWorkbench(snapshot => snapshot.panes)
   const bootstrapError = useWorkbench(snapshot => snapshot.bootstrapError)
   const focusedSessionId = useWorkbench(snapshot => snapshot.focusedSessionId)
   const noWorkspace = useWorkbench(snapshot => snapshot.noWorkspace)
+  const languages = usePaneLanguages(view => view)
   const listed = useSessions(state => state.byId)
   if (noWorkspace && panes.every(pane => pane.sessionId === undefined)) {
     return (
@@ -96,6 +98,7 @@ export function WorkbenchPanel({
             <div className={css.chrome}>
               <span className={css.role}>{t(`pane.${role}`)}</span>
               {pane.title.length > 0 ? <span className={css.title}>{pane.title}</span> : null}
+              <PaneLanguageSelector index={index} view={languages} save={saveOutputLanguage} t={t} />
             </div>
             {body}
           </div>

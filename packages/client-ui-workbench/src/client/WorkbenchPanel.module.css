@@ -85,3 +85,43 @@
   line-height: 22px;
   color: var(--dsw-alias-label-secondary);
 }
+
+/* Pane header: the window's model output language, at the right end. */
+.languageSlot {
+  flex: none;
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.language {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.language:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.language:disabled {
+  cursor: default;
+}
+
+.languageChevron {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}

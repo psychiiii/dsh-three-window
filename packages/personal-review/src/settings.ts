@@ -78,7 +78,8 @@ export const WorkspacePromptsSchema = z.array(z.object({
  *
  * `outputLanguage` holds one table tag (or blank) per window and reaches models
  * only through `output-language.ts`, which renders fixed text from the tag;
- * `outputLanguagePrompted` records that the first-entry prompt was answered.
+ * `outputLanguagePrompted` is no longer read (the first-entry prompt was
+ * removed); it stays so profiles that already hold it keep loading.
  * `workspacePrompts` holds each Workspace's turn prompt, keyed by root path.
  *
  * `perspective` is free text that reaches every seat's perspective section and
@@ -105,7 +106,7 @@ export interface ReviewSettingsConfig {
   perspective: Volatile<string>
   /** Output language per window as last written. */
   outputLanguage: Volatile<Partial<OutputLanguageSettings>>
-  /** Whether the first-entry output-language prompt has been answered. */
+  /** Legacy: once recorded the removed first-entry prompt's answer; never read. */
   outputLanguagePrompted: Volatile<boolean>
   /** Per-Workspace turn prompts as last written. */
   workspacePrompts: Volatile<WorkspacePromptEntry[]>

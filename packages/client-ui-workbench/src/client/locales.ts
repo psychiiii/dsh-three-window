@@ -20,6 +20,9 @@ export const zh = {
   'pane.bootstrapFailed': '工作台引导失败：{message}',
   'empty.title': '还没有工作区',
   'empty.body': '点左侧的「添加工作区」选一个项目目录，三个窗口会在那里打开。',
+  'language.label': '输出语言：{name}',
+  'language.unspecified': '不指定',
+  'language.aria': '模型输出语言',
 }
 
 /** English dictionary. */
@@ -33,4 +36,7 @@ export const en: Record<WorkbenchKey, string> = {
   'pane.bootstrapFailed': 'Workbench bootstrap failed: {message}',
   'empty.title': 'No workspace yet',
   'empty.body': 'Use “Add workspace” on the left to pick a project directory; the three windows open there.',
+  'language.label': 'Output language: {name}',
+  'language.unspecified': 'Not specified',
+  'language.aria': 'Model output language',
 }

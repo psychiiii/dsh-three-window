@@ -17,7 +17,7 @@ import {
   type ReviewerCatalog, type ReviewerResolutionDetail,
 } from '@psychiiii/dsh-three-window-review/resolve'
 import {
-  DEFAULT_OUTPUT_LANGUAGES, outputLanguageOf, outputLanguagePromptedFromSection, outputLanguagesFromSection,
+  DEFAULT_OUTPUT_LANGUAGES, outputLanguageOf, outputLanguagesFromSection,
   UNSPECIFIED_OUTPUT_LANGUAGE,
   type OutputLanguageSettings, type OutputLanguageWindow,
 } from '@psychiiii/dsh-three-window-review/output-language'
@@ -53,8 +53,6 @@ export interface ReviewSettingsState {
   perspective: string
   /** Each window's output language: a table tag, or blank for not specified. */
   outputLanguage: OutputLanguageSettings
-  /** Whether the first-entry output-language prompt has been answered. */
-  outputLanguagePrompted: boolean
   /** Each Workspace's turn prompt, keyed by normalized root path. */
   workspacePrompts: readonly WorkspacePromptEntry[]
   /**
@@ -150,7 +148,6 @@ export class ReviewSettingsController {
     reviewers: [],
     perspective: '',
     outputLanguage: { ...DEFAULT_OUTPUT_LANGUAGES },
-    outputLanguagePrompted: false,
     workspacePrompts: [],
     errorDetail: null,
   })
@@ -271,8 +268,7 @@ export class ReviewSettingsController {
   }
 
   /**
-   * Persist one window's output language. Answers the first-entry prompt too:
-   * a user who picked a language in settings has made the choice it asks for.
+   * Persist one window's output language.
    * @param window - the window to change.
    * @param tag - a table tag, or blank for not specified; anything else is refused.
    * @returns whether the write landed.
@@ -283,26 +279,7 @@ export class ReviewSettingsController {
       return false
     }
     const next = { ...this.store.getSnapshot().outputLanguage, [window]: tag }
-    return this.commit([
-      { op: 'set', path: ['outputLanguage'], value: next as never },
-      { op: 'set', path: ['outputLanguagePrompted'], value: true as never },
-    ])
-  }
-
-  /**
-   * Answer the first-entry prompt: store the chosen languages, or only record
-   * that the prompt was dismissed, so it never shows again either way.
-   * @param languages - the three windows' choices, or null for "later".
-   * @returns whether the write landed.
-   */
-  async answerOutputLanguagePrompt(languages: OutputLanguageSettings | null): Promise<boolean> {
-    const ops: { op: 'set'; path: string[]; value: never }[] = []
-    if (languages !== null) {
-      const next = outputLanguagesFromSection({ outputLanguage: languages })
-      ops.push({ op: 'set', path: ['outputLanguage'], value: next as never })
-    }
-    ops.push({ op: 'set', path: ['outputLanguagePrompted'], value: true as never })
-    return this.commit(ops)
+    return this.commit([{ op: 'set', path: ['outputLanguage'], value: next as never }])
   }
 
   /**
@@ -425,7 +402,6 @@ export class ReviewSettingsController {
         state.reviewers = []
         state.perspective = ''
         state.outputLanguage = { ...DEFAULT_OUTPUT_LANGUAGES }
-        state.outputLanguagePrompted = false
         state.workspacePrompts = []
       })
       return
@@ -441,7 +417,6 @@ export class ReviewSettingsController {
       state.reviewers = rowsFromValue(value)
       state.perspective = perspectiveFromSection(value)
       state.outputLanguage = outputLanguagesFromSection(value)
-      state.outputLanguagePrompted = outputLanguagePromptedFromSection(value)
       state.workspacePrompts = workspacePromptsFromSection(value)
     })
   }

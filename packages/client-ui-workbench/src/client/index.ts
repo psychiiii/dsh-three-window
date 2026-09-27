@@ -21,6 +21,7 @@ import { watchWorkbenchPanes } from './bootstrap.ts'
 import { createFocusStore } from './focus-store.ts'
 import { createWindowHistoryStore } from './window-history.ts'
 import { WorkbenchPanel } from './WorkbenchPanel.tsx'
+import { paneLanguages } from './pane-language.ts'
 import { WorkbenchConversation } from './WorkbenchConversation.tsx'
 import { Workbench, type WorkbenchInjected } from './service.ts'
 import { en, NS, zh, type WorkbenchKey } from './locales.ts'
@@ -88,6 +89,7 @@ export function apply(ctx: ClientContext, config?: WorkbenchBootPayload): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workbench: dictionaries')
   const workbench = new Workbench(ctx, resolved, createFocusStore(), createWindowHistoryStore())
   if (resolved.windows.length !== WORKBENCH_WINDOW_COUNT) return
+  const languages = paneLanguages(ctx, resolved.windows.map(window => window.agentPreset))
   ctx.slots.inject('main', function* () {
     yield ctx.slots.register({
       name: 'main',
@@ -98,7 +100,8 @@ export function apply(ctx: ClientContext, config?: WorkbenchBootPayload): void {
         'workbench.conversation': { kind: 'single', scope: 'session-maybe' },
       },
       inject: (): WorkbenchInjected => ({
-        hooks: { workbench },
+        hooks: { workbench, paneLanguages: languages.view },
+        saveOutputLanguage: languages.save,
         focus: (sessionId) => { workbench.focus(sessionId) },
         bind: (windows, workspaceId) => { workbench.bind(windows, workspaceId) },
         swap: (fromIndex, toIndex) => { workbench.swap(fromIndex, toIndex) },

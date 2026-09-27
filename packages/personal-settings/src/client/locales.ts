@@ -149,11 +149,6 @@ export const zh = {
   'language.row.title': '模型输出语言 · {window}',
   'language.row.description': '模型回复你时用的语言；代码、注释和提交信息仍按项目约定。界面语言在上面的「语言」里设置。',
   'language.row.readonly': '当前页面不能修改设置（只有本机地址打开的页面可以写入配置）。',
-  'language.prompt.title': '选择模型输出语言',
-  'language.prompt.description': '三个窗口可以分别指定模型回复你时用的语言。只影响模型对你说的话，不影响代码、注释和提交信息。以后可以在 设置 → 通用 里修改。',
-  'language.prompt.later': '稍后',
-  'language.prompt.close': '关闭',
-  'language.prompt.save': '保存',
 } satisfies Record<string, string>
 
 /** Locale key union. */
@@ -308,9 +303,4 @@ export const en = {
   'language.row.title': 'Model output language · {window}',
   'language.row.description': 'The language the model answers you in; code, comments, and commit messages still follow the project. The interface language is set under Language above.',
   'language.row.readonly': 'Settings cannot be changed from this page (only a page opened on this machine’s own address can write configuration).',
-  'language.prompt.title': 'Choose the model output language',
-  'language.prompt.description': 'Each of the three windows can have its own language for the model’s answers to you. It affects only what the model says to you, not code, comments, or commit messages. You can change it later under Settings → General.',
-  'language.prompt.later': 'Later',
-  'language.prompt.close': 'Close',
-  'language.prompt.save': 'Save',
 } satisfies Record<ReviewKey, string>

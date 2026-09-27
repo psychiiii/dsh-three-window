@@ -26,9 +26,9 @@ A three-window workbench plugin for [DeepSeek Harness](https://github.com/deepse
   window stays locked until at least one is set; a single one runs an ordinary
   single-model review). The review perspective is edited in Settings → Windows & review.
 - **Model output language.** Each window can have its own language for the
-  model's answers to you (Settings → General; you are also asked once on first
-  entry). It governs only what the model says to you: code, comments, and commit
-  messages keep following the project.
+  model's answers to you: pick it from “输出语言：…” at the top right of the
+  window, or in Settings → General (the same setting). It governs only what the
+  model says to you: code, comments, and commit messages keep following the project.
 - **Per-workspace turn prompt.** In the workspace list, ⋯ → “Turn prompt…” sets a
   text that is appended after every message in that workspace, in all three
   windows. A 📌 beside the name marks a workspace that has one and previews it on

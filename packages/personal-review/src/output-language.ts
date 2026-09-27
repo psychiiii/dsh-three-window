@@ -121,16 +121,6 @@ export function outputLanguagesFromSection(section: unknown): OutputLanguageSett
 }
 
 /**
- * Whether the first-entry prompt has been answered, read out of a stored section.
- * @param section - the `personal-settings` Config section, or any object.
- * @returns true only when the stored flag is exactly true.
- */
-export function outputLanguagePromptedFromSection(section: unknown): boolean {
-  return section !== null && typeof section === 'object' && !Array.isArray(section)
-    && (section as { outputLanguagePrompted?: unknown }).outputLanguagePrompted === true
-}
-
-/**
  * The per-turn tag a window's model receives.
  * @param tag - the window's stored value.
  * @returns the tag text, or undefined when nothing is to be injected.
