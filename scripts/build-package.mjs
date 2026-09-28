@@ -33,8 +33,9 @@
  * `dsh-three-window.sh` (installer plus embedded package; the name is fixed so
  * `releases/latest/download/dsh-three-window.sh` always serves the newest), an
  * identical `install.sh` for local use, the bare `dsh-three-window.tgz` with its
- * `.sha256` for `--from`, and `SHA256SUMS`. `DSH_RELEASE_REVISION=N` (N ≥ 2)
- * names a re-release of the same baseline `-rN` in the tag and title. The
+ * `.sha256` for `--from`, and `SHA256SUMS`. The Release is named
+ * `<verified bound>-rN` (the newest dsh in `verified-hosts.json`, and
+ * `DSH_RELEASE_REVISION=N`, default 1) in the tag and title. The
  * baseline must be an rc or stable version, and both READMEs must install
  * from the `latest` URL, so they never name a version. `dist/` and `out/` are rebuilt
  * from scratch on every run. `DSH_REPO_ROOT` names the checkout that supplies
@@ -173,11 +174,21 @@ if (typeof baselineVersion !== 'string' || baselineVersion === '') fail(`${join(
 if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[0-9]+)?$/u.test(baselineVersion)) {
   fail(`build checkout version ${baselineVersion} is not an rc or stable release; build against an official rc or stable tag`)
 }
-// A second or later Release of one baseline takes `-rN`: a published Release's
-// asset is never replaced, so one download URL always yields the same bytes.
-const revision = process.env.DSH_RELEASE_REVISION ?? ''
-if (revision !== '' && !/^[2-9]$|^[1-9][0-9]+$/u.test(revision)) fail(`DSH_RELEASE_REVISION is ${revision}; it must be 2 or higher`)
-const releaseVersion = revision === '' ? baselineVersion : `${baselineVersion}-r${revision}`
+// The stamped verified bound is the highest host an acceptance run passed on,
+// recorded in `verified-hosts.json`; the baseline is always one of them.
+const verifiedHosts = readJson(join(ROOT, 'verified-hosts.json')).hosts
+if (!Array.isArray(verifiedHosts) || !verifiedHosts.some(host => host.version === baselineVersion)) {
+  fail(`verified-hosts.json does not list the build checkout ${baselineVersion}`)
+}
+const verifiedBound = verifiedHosts.map(host => host.version).reduce((a, b) => (semverOrder(a, b) >= 0 ? a : b))
+// A Release is named after the newest dsh it was verified on, plus `-rN`
+// counting this plugin's Releases on that dsh from 1 (Owner decision,
+// 2026-09-28): a new dsh release starts again at r1, so N never piles up the
+// way it did when the name followed the build baseline. A published Release's
+// asset is never replaced, so each N is used once.
+const revision = process.env.DSH_RELEASE_REVISION ?? '1'
+if (!/^[1-9][0-9]*$/u.test(revision)) fail(`DSH_RELEASE_REVISION is ${revision}; it must be 1 or higher`)
+const releaseVersion = `${verifiedBound}-r${revision}`
 // One fixed asset name: `releases/latest/download/<name>` then always serves
 // the newest Release, so the README's install lines never change and running
 // them again is how a user updates. The version lives in the tag and title.
@@ -397,16 +408,9 @@ const hostFloor = installerSource.match(/^HOST_FLOOR='([^']+)'$/mu)?.[1]
 if (hostFloor !== baselineVersion) {
   fail(`scripts/install.sh HOST_FLOOR is ${String(hostFloor)} but the build checkout is ${baselineVersion}; set HOST_FLOOR to the baseline when switching it`)
 }
-// The stamped verified bound is the highest host an acceptance run passed on,
-// recorded in `verified-hosts.json`; the baseline is always one of them.
-const verifiedHosts = readJson(join(ROOT, 'verified-hosts.json')).hosts
-if (!Array.isArray(verifiedHosts) || !verifiedHosts.some(host => host.version === baselineVersion)) {
-  fail(`verified-hosts.json does not list the build checkout ${baselineVersion}`)
-}
 for (const host of verifiedHosts) {
   if (semverOrder(host.version, hostFloor) < 0) fail(`verified-hosts.json lists ${host.version}, below HOST_FLOOR ${hostFloor}`)
 }
-const verifiedBound = verifiedHosts.map(host => host.version).reduce((a, b) => (semverOrder(a, b) >= 0 ? a : b))
 const installer = installerSource
   .replaceAll('@@PLUGIN_VERSION@@', baselineVersion)
   .replaceAll('@@RELEASE_VERSION@@', releaseVersion)
