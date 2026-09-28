@@ -38,12 +38,18 @@ export interface SeatCompleteRequest {
    */
   readonly maxTokens: number
   readonly signal: AbortSignal
+  /**
+   * Abort when no output arrives for this many ms, measured from the call and
+   * from each chunk; `0` or absent never aborts for silence. A seat that keeps
+   * producing output is never cut by this, however long it runs.
+   */
+  readonly idleTimeoutMs?: number
 }
 
 /** Assembled seat text, or a neutral failure reason. */
 export type SeatTextResult =
   | { readonly ok: true; readonly text: string; readonly finish: string }
-  | { readonly ok: false; readonly error: string; readonly finish?: string }
+  | { readonly ok: false; readonly error: string; readonly finish?: string; readonly idle?: true }
 
 function isAborted(signal: AbortSignal): boolean {
   return signal.aborted
@@ -81,6 +87,7 @@ export function buildSeatGenerateOptions(request: SeatCompleteRequest): Generate
 export async function readSeatText(
   stream: AsyncIterable<StreamChunk>,
   signal: AbortSignal,
+  onChunk?: () => void,
 ): Promise<SeatTextResult> {
   if (isAborted(signal)) return { ok: false, error: 'seat call aborted' }
   const assembler = new BlockAssembler()
@@ -89,6 +96,7 @@ export async function readSeatText(
   try {
     for await (const chunk of stream) {
       if (isAborted(signal)) return { ok: false, error: 'seat call aborted' }
+      onChunk?.()
       if (finished) return { ok: false, error: 'seat emitted data after its terminal finish', finish }
       assembler.push(chunk)
       if (chunk.type === 'finish') {
@@ -135,5 +143,22 @@ export async function completeSeat(
   llm: SeatLlm,
   request: SeatCompleteRequest,
 ): Promise<SeatTextResult> {
-  return readSeatText(llm.stream(buildSeatGenerateOptions(request)), request.signal)
+  const idleMs = request.idleTimeoutMs ?? 0
+  const silence = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const rearm = (): void => {
+    if (timer !== undefined) clearTimeout(timer)
+    if (idleMs > 0) timer = setTimeout(() => { silence.abort() }, idleMs)
+  }
+  rearm()
+  const signal = AbortSignal.any([request.signal, silence.signal])
+  try {
+    const result = await readSeatText(llm.stream(buildSeatGenerateOptions({ ...request, signal })), signal, rearm)
+    if (!result.ok && silence.signal.aborted && !request.signal.aborted) {
+      return { ok: false, error: `seat produced no output for ${String(Math.round(idleMs / 1000))} s`, idle: true }
+    }
+    return result
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
 }

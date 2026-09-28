@@ -41,6 +41,7 @@ import {
 } from './window-history.ts'
 import type { WorkbenchWindow } from './windows.ts'
 import type { PaneLanguagesView } from './pane-language.ts'
+import type { PaneViewsView } from './pane-view.ts'
 
 /** Pane index, left to right: chat, construct, review. */
 export type WorkbenchPaneIndex = 0 | 1 | 2
@@ -173,7 +174,15 @@ export interface WorkbenchInjected {
     readonly workbench: HostObservable<WorkbenchSnapshot>
     /** Each pane's model output language; a constant unavailable view without the settings package. */
     readonly paneLanguages: HostObservable<PaneLanguagesView>
+    /** The Conversation Views on offer and each pane Session's choice. */
+    readonly paneViews: HostObservable<PaneViewsView>
   }
+  /**
+   * Show another Conversation View in the pane of `sessionId`.
+   * @param sessionId - the pane's Session.
+   * @param view - a listed View id.
+   */
+  readonly selectPaneView: (sessionId: string, view: string) => void
   /**
    * Store the output language of pane `index`'s window.
    * @param index - left-to-right pane index.

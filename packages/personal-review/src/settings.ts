@@ -24,6 +24,10 @@ import {
   WORKSPACE_PROMPT_ENTRIES_MAX, WORKSPACE_PROMPT_MAX, workspacePromptsFromSection,
   type WorkspacePromptEntry,
 } from './workspace-prompt.ts'
+import {
+  REVIEW_GUIDANCE_ENTRIES_MAX, REVIEW_GUIDANCE_MAX, reviewGuidanceFromSection,
+  type ReviewGuidanceEntry,
+} from './review-guidance.ts'
 
 export {
   EMPTY_REVIEWERS_MESSAGE, MAX_REVIEWERS, REVIEW_PRESET, REVIEW_SETTINGS_ENTRY,
@@ -73,6 +77,12 @@ export const WorkspacePromptsSchema = z.array(z.object({
   prompt: z.string().max(WORKSPACE_PROMPT_MAX),
 })).max(WORKSPACE_PROMPT_ENTRIES_MAX).default([])
 
+/** Per-Workspace standing review guidance, keyed by root path; length limits only, which serialize. */
+export const ReviewGuidanceSchema = z.array(z.object({
+  root: z.string(),
+  text: z.string().max(REVIEW_GUIDANCE_MAX),
+})).max(REVIEW_GUIDANCE_ENTRIES_MAX).default([])
+
 /**
  * Config fields of the `personal-settings` Host row, all editable live.
  *
@@ -82,13 +92,14 @@ export const WorkspacePromptsSchema = z.array(z.object({
  * removed); it stays so profiles that already hold it keep loading.
  * `workspacePrompts` holds each Workspace's turn prompt, keyed by root path.
  *
- * `perspective` is free text that reaches every seat's perspective section and
- * nothing else: it can never replace the seat system prompt or the output
- * protocol, both of which are constants in `prompts.ts`. Blank — the default —
- * sends the built-in `DEFAULT_PERSPECTIVE`. Nothing validates the wording: a
- * keyword blocklist is bypassable and misfires on legitimate text, and a
- * guarantee that can be walked around is worse than none, so the field's
- * stated scope plus the page's warning are the whole defence.
+ * `reviewGuidance` holds each Workspace's standing review guidance, and
+ * `perspective` (its historical name) is the default for Workspaces without
+ * their own. Either reaches the seats only as the "standing review guidance"
+ * section: it can never replace the seat system prompt or the output protocol,
+ * both constants in `prompts.ts`. Blank sends "(none)". Nothing validates the
+ * wording: a keyword blocklist is bypassable and misfires on legitimate text,
+ * and a guarantee that can be walked around is worse than none, so the
+ * section's stated scope plus the page's warning are the whole defence.
  */
 export const ReviewSettingsConfig = z.object({
   reviewers: ReviewerTableSchema.volatile(),
@@ -96,13 +107,14 @@ export const ReviewSettingsConfig = z.object({
   outputLanguage: OutputLanguageSchema.volatile(),
   outputLanguagePrompted: z.boolean().default(false).volatile(),
   workspacePrompts: WorkspacePromptsSchema.volatile(),
+  reviewGuidance: ReviewGuidanceSchema.volatile(),
 })
 
 /** Resolved Config of the `personal-settings` Host row: live references, read with `get()`. */
 export interface ReviewSettingsConfig {
   /** Reviewer table as last written. */
   reviewers: Volatile<ReviewerSettingsRow[]>
-  /** Perspective text as last written; blank means the built-in default. */
+  /** Default standing guidance (historically "perspective") as last written; blank means none. */
   perspective: Volatile<string>
   /** Output language per window as last written. */
   outputLanguage: Volatile<Partial<OutputLanguageSettings>>
@@ -110,6 +122,8 @@ export interface ReviewSettingsConfig {
   outputLanguagePrompted: Volatile<boolean>
   /** Per-Workspace turn prompts as last written. */
   workspacePrompts: Volatile<WorkspacePromptEntry[]>
+  /** Per-Workspace standing review guidance as last written. */
+  reviewGuidance: Volatile<ReviewGuidanceEntry[]>
 }
 
 /** Current reviewer settings, read at the moment `review_debate` runs. */
@@ -120,6 +134,8 @@ export interface ReviewSettingsService {
   outputLanguages(): OutputLanguageSettings
   /** @returns the usable per-Workspace turn prompts as the profile holds them now. */
   workspacePrompts(): WorkspacePromptEntry[]
+  /** @returns the usable per-Workspace review guidance as the profile holds it now. */
+  reviewGuidance(): ReviewGuidanceEntry[]
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -142,5 +158,6 @@ export function provideReviewSettings(ctx: Context, config: ReviewSettingsConfig
     }),
     outputLanguages: () => outputLanguagesFromSection({ outputLanguage: config.outputLanguage.get() }),
     workspacePrompts: () => workspacePromptsFromSection({ workspacePrompts: config.workspacePrompts.get() }),
+    reviewGuidance: () => reviewGuidanceFromSection({ reviewGuidance: config.reviewGuidance.get() }),
   })
 }

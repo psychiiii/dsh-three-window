@@ -137,7 +137,7 @@ export function outputLanguageTag(tag: string | undefined): string | undefined {
  */
 export const OUTPUT_LANGUAGE_RULE =
   'A user turn may carry an <output-language> tag. When it does, write everything you say to the user in that language. '
-  + 'Code, identifiers, file contents, and commit messages follow the project\'s existing conventions instead. '
+  + 'What you write into the workspace itself keeps the language and conventions already used there. '
   + 'If the user explicitly asks for a different language, follow the user.'
 
 /**

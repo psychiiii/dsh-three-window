@@ -24,6 +24,9 @@ import {
 import {
   withWorkspacePrompt, workspacePromptsFromSection, type WorkspacePromptEntry,
 } from '@psychiiii/dsh-three-window-review/workspace-prompt'
+import {
+  reviewGuidanceFromSection, withReviewGuidance, type ReviewGuidanceEntry,
+} from '@psychiiii/dsh-three-window-review/review-guidance'
 
 /** One provider group the modal can offer. */
 export interface ReviewCatalogGroup {
@@ -49,8 +52,10 @@ export interface ReviewSettingsState {
   writable: boolean
   revision: number
   reviewers: readonly ReviewerSettingsRow[]
-  /** Stored perspective text, verbatim; blank means the built-in default. */
+  /** The default standing review guidance (stored as `perspective`), verbatim; blank means none. */
   perspective: string
+  /** Each Workspace's own standing review guidance, keyed by normalized root path. */
+  reviewGuidance: readonly ReviewGuidanceEntry[]
   /** Each window's output language: a table tag, or blank for not specified. */
   outputLanguage: OutputLanguageSettings
   /** Each Workspace's turn prompt, keyed by normalized root path. */
@@ -149,6 +154,7 @@ export class ReviewSettingsController {
     perspective: '',
     outputLanguage: { ...DEFAULT_OUTPUT_LANGUAGES },
     workspacePrompts: [],
+    reviewGuidance: [],
     errorDetail: null,
   })
 
@@ -283,6 +289,24 @@ export class ReviewSettingsController {
   }
 
   /**
+   * Persist one Workspace's standing review guidance; blank text removes it,
+   * so that Workspace uses the default again.
+   * @param root - the Workspace's root path.
+   * @param text - the text, verbatim; over the limit is refused without writing.
+   * @returns whether the write landed.
+   */
+  async saveReviewGuidance(root: string, text: string): Promise<boolean> {
+    let next: ReviewGuidanceEntry[]
+    try {
+      next = withReviewGuidance(this.store.getSnapshot().reviewGuidance, root, text)
+    } catch (error) {
+      this.reportError(error)
+      return false
+    }
+    return this.commit([{ op: 'set', path: ['reviewGuidance'], value: next as never }])
+  }
+
+  /**
    * Persist one Workspace's turn prompt; blank text removes it.
    * @param root - the Workspace's root path.
    * @param prompt - the text, verbatim; over the limit is refused without writing.
@@ -403,6 +427,7 @@ export class ReviewSettingsController {
         state.perspective = ''
         state.outputLanguage = { ...DEFAULT_OUTPUT_LANGUAGES }
         state.workspacePrompts = []
+        state.reviewGuidance = []
       })
       return
     }
@@ -418,6 +443,7 @@ export class ReviewSettingsController {
       state.perspective = perspectiveFromSection(value)
       state.outputLanguage = outputLanguagesFromSection(value)
       state.workspacePrompts = workspacePromptsFromSection(value)
+      state.reviewGuidance = reviewGuidanceFromSection(value)
     })
   }
 }

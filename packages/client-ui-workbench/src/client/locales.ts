@@ -23,6 +23,7 @@ export const zh = {
   'language.label': '输出语言：{name}',
   'language.unspecified': '不指定',
   'language.aria': '模型输出语言',
+  'view.aria': '切换对话视图',
 }
 
 /** English dictionary. */
@@ -39,4 +40,5 @@ export const en: Record<WorkbenchKey, string> = {
   'language.label': 'Output language: {name}',
   'language.unspecified': 'Not specified',
   'language.aria': 'Model output language',
+  'view.aria': 'Switch the conversation view',
 }

@@ -55,6 +55,7 @@
     "@deepseek-ai/dsh-session": "*",
     "@deepseek-ai/dsh-session-projection": "*",
     "@deepseek-ai/dsh-settings": "*",
+    "@deepseek-ai/dsh-system-prompt": "*",
     "@psychiiii/dsh-three-window-hooks": "*",
     "@psychiiii/dsh-three-window-review": "*"
   },

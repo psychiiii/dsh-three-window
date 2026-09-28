@@ -15,7 +15,7 @@
  */
 
 import type {
-  FindingClaim, GroupingMode, MergedFinding, ReviewFinding, VerdictValue,
+  FindingClaim, GroupingMode, MergedFinding, ReviewFinding, ReviewScope, VerdictValue,
 } from './types.ts'
 
 /** Severity rank used when merging the same grouping key. */
@@ -67,6 +67,7 @@ interface Accumulator {
   evidence: string
   seats: Set<string>
   claims: Map<string, Set<string>>
+  scope: ReviewScope
 }
 
 function sortClaims(claims: readonly FindingClaim[]): FindingClaim[] {
@@ -95,6 +96,7 @@ function toMerged(item: Accumulator): MergedFinding {
     seatCount: seats.length,
     seats,
     claims: sortClaims(claims),
+    scope: item.scope,
   }
 }
 
@@ -121,9 +123,12 @@ export function mergeFindings(
           evidence: finding.evidence.trim(),
           seats: new Set([row.seatId]),
           claims: new Map([[claim, new Set([row.seatId])]]),
+          scope: finding.scope,
         })
         continue
       }
+      // One seat reading it as part of what was asked is enough to report it there.
+      if (finding.scope === 'focus') current.scope = 'focus'
       current.seats.add(row.seatId)
       current.severity = maxSeverity(current.severity, finding.severity)
       const claimSeats = current.claims.get(claim)

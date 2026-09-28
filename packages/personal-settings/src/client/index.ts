@@ -18,7 +18,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@psychiiii/dsh-three-window-review/types'
-import { DEFAULT_PERSPECTIVE } from '@psychiiii/dsh-three-window-review/prompts'
 import { REVIEW_SETTINGS_ENTRY, type ReviewSettings } from '@psychiiii/dsh-three-window-review/reviewers'
 import { ReviewDock } from './ReviewDock.tsx'
 import type { ReviewDockInjected } from './ReviewDock.tsx'
@@ -85,6 +84,7 @@ export function apply(ctx: ClientContext): void {
     loadSettings: () => controller.load(),
     loadCatalog: () => controller.loadCatalog(),
     saveSettings: (rows, expectedRevision) => controller.save(rows, expectedRevision),
+    saveGuidance: (root, text) => controller.saveReviewGuidance(root, text),
     lockComposer: (sessionId, locked, reason) => { composerLock.set(sessionId, locked, reason) },
   })
   ctx.slots.inject('conversation.input.dock', () =>
@@ -108,7 +108,6 @@ export function apply(ctx: ClientContext): void {
     savePerspective: (perspective, expectedRevision) =>
       controller.savePerspective(perspective, expectedRevision),
     loadHooks: path => hooks.load(path),
-    defaultPerspective: DEFAULT_PERSPECTIVE,
   })
 
   // Settings → General: dsh's Language row is order 0, and 1–9 are free on

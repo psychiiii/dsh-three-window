@@ -27,6 +27,18 @@
       "types": "./lib/types/reviewers.d.ts",
       "default": "./lib/types/reviewers.js"
     },
+    "./report-markdown": {
+      "types": "./lib/types/report-markdown.d.ts",
+      "default": "./lib/types/report-markdown.js"
+    },
+    "./review-guidance": {
+      "types": "./lib/types/review-guidance.d.ts",
+      "default": "./lib/types/review-guidance.js"
+    },
+    "./manifest": {
+      "types": "./lib/types/manifest.d.ts",
+      "default": "./lib/types/manifest.js"
+    },
     "./settings": {
       "types": "./lib/types/settings.d.ts",
       "default": "./lib/types/settings.js"
@@ -53,8 +65,10 @@
     "@deepseek-ai/dsh-llm": "*",
     "@deepseek-ai/dsh-sandbox": "*",
     "@deepseek-ai/dsh-sandbox-policy": "*",
+    "@deepseek-ai/dsh-session": "*",
     "@deepseek-ai/dsh-session-projection": "*",
     "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-user-questions": "*",
     "@deepseek-ai/dsh-util-values": "*",
     "@deepseek-ai/schemastery": "*",
     "zod": "*"

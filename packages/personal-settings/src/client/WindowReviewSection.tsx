@@ -9,10 +9,9 @@
  * page names.
  */
 import { useState, type ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineRegular, Input, Menu, PathLabel } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { resolvePerspective } from '@psychiiii/dsh-three-window-review/prompts'
 import type { ReviewKey } from './locales.ts'
 import type { ReviewSettingsState } from './settings-store.ts'
 import type { HooksState, ProjectOption } from './workspace-hooks-store.ts'
@@ -37,8 +36,6 @@ export interface WindowReviewInjected {
   savePerspective: (perspective: string, expectedRevision?: number) => Promise<boolean>
   /** Read one project's hook files; omit the path to reuse the current choice. */
   loadHooks: (path?: string) => Promise<void>
-  /** The text a blank perspective sends. */
-  defaultPerspective: string
 }
 
 export type WindowReviewSectionProps =
@@ -238,48 +235,95 @@ function DefaultCard({ t, file }: { t: Translate; file: HookFileView | undefined
   )
 }
 
+/**
+ * One project in the selector menu: the folder name first, where projects
+ * differ, then its parent directory dimmed and clipped from the start. dsh caps
+ * the menu at 360px, so a whole absolute path would show only the shared prefix.
+ * @param props - the project's absolute path.
+ * @returns the label, with the full path on hover.
+ */
+function ProjectMenuLabel({ path }: { path: string }): ReactNode {
+  const trimmed = path.length > 1 ? path.replace(/[\\/]+$/u, '') : path
+  const cut = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+  const name = cut < 0 ? trimmed : trimmed.slice(cut + 1) || trimmed
+  const parent = name === trimmed ? '' : cut === 0 ? trimmed.slice(0, 1) : trimmed.slice(0, cut)
+  return (
+    <span className={css.menuItem} title={path} data-hook-project-option={path}>
+      <span className={css.menuName}>{name}</span>
+      {parent.length > 0 && <span className={css.menuDir}><bdi>{parent}</bdi></span>}
+    </span>
+  )
+}
+
 function ProjectSelector({ t, state, loadHooks }: {
   t: Translate
   state: HooksState
   loadHooks: (path?: string) => Promise<void>
 }): ReactNode {
   const [draft, setDraft] = useState('')
+  const [open, setOpen] = useState(false)
   const options: readonly ProjectOption[] = state.options
+  // dsh's own Menu rather than a native <select>: a native one sizes itself to
+  // its longest path and runs out of the settings panel. PathLabel keeps the
+  // folder name visible and clips the directories, with the full path on hover.
   return (
     <div className={css.selector} data-hook-selector="">
-      <label>
-        {t('windows.hooks.project.pick')}
-        {' '}
-        <select
-          className={css.select}
-          data-hook-project-select=""
-          value={state.selected ?? ''}
-          onChange={(event) => { void loadHooks(event.target.value) }}
+      <div className={css.pickRow}>
+        <span className={css.pickLabel}>{t('windows.hooks.project.pick')}</span>
+        {/* Menu wraps its anchor, so the shrinking rides a wrapper of ours. */}
+        <span className={css.pickSlot}>
+          <Menu
+            open={open}
+            onClose={() => { setOpen(false) }}
+            items={options.map(option => ({ id: option.path, label: <ProjectMenuLabel path={option.path} /> }))}
+            {...(state.selected === null ? {} : { selectedId: state.selected })}
+            onSelect={(path) => {
+              setOpen(false)
+              void loadHooks(path)
+            }}
+            align="start"
+            portal
+            anchor={(
+              <button
+                type="button"
+                className={css.pick}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                disabled={options.length === 0}
+                data-hook-project-select=""
+                data-hook-project-value={state.selected ?? ''}
+                onClick={() => { setOpen(v => !v) }}
+              >
+                {state.selected === null
+                  ? <span className={css.pickEmpty}>—</span>
+                  : <PathLabel className={css.pickPath} path={state.selected} />}
+                <IconChevronDownOutlineRegular className={css.pickChevron} />
+              </button>
+            )}
+          />
+        </span>
+      </div>
+      <div className={css.manualRow}>
+        <Input
+          className={css.manual ?? ''}
+          data-hook-project-input=""
+          placeholder={t('windows.hooks.project.manual')}
+          value={draft}
+          onChange={(event) => { setDraft(event.target.value) }}
+          onKeyDown={(event) => { if (event.key === 'Enter' && draft.trim().length > 0) void loadHooks(draft.trim()) }}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          data-hook-project-apply=""
+          onClick={() => { if (draft.trim().length > 0) void loadHooks(draft.trim()) }}
         >
-          {state.selected === null && <option value="">—</option>}
-          {options.map(option => (
-            <option key={option.path} value={option.path}>{option.path}</option>
-          ))}
-        </select>
-      </label>
-      <input
-        className={css.text}
-        data-hook-project-input=""
-        placeholder={t('windows.hooks.project.manual')}
-        value={draft}
-        onChange={(event) => { setDraft(event.target.value) }}
-      />
-      <Button
-        variant="outline"
-        size="sm"
-        data-hook-project-apply=""
-        onClick={() => { if (draft.trim().length > 0) void loadHooks(draft.trim()) }}
-      >
-        {t('windows.hooks.project.apply')}
-      </Button>
-      <Button variant="outline" size="sm" data-hook-refresh="" onClick={() => { void loadHooks() }}>
-        {t('windows.hooks.refresh')}
-      </Button>
+          {t('windows.hooks.project.apply')}
+        </Button>
+        <Button variant="outline" size="sm" data-hook-refresh="" onClick={() => { void loadHooks() }}>
+          {t('windows.hooks.refresh')}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -348,11 +392,16 @@ function HookBlock({ t, state, loadHooks }: {
   )
 }
 
-function PerspectiveBlock({ t, settings, savePerspective, defaultPerspective }: {
+/**
+ * The default standing review guidance: what reviews weigh in every Workspace
+ * that has no guidance of its own (set from the review window). Stored in the
+ * historical `perspective` field; blank sends none, and the reviewers use only
+ * the built-in general criteria.
+ */
+function PerspectiveBlock({ t, settings, savePerspective }: {
   t: Translate
   settings: ReviewSettingsState
   savePerspective: (perspective: string, expectedRevision?: number) => Promise<boolean>
-  defaultPerspective: string
 }): ReactNode {
   const [draft, setDraft] = useState(settings.perspective)
   const [filledFrom, setFilledFrom] = useState(settings.revision)
@@ -362,8 +411,8 @@ function PerspectiveBlock({ t, settings, savePerspective, defaultPerspective }: 
     setDraft(settings.perspective)
     setSaved(false)
   }
-  const effective = resolvePerspective(draft)
-  const isDefault = effective === defaultPerspective
+  const effective = draft.trim()
+  const isDefault = effective.length === 0
   return (
     <div className={css.block} data-window-review-perspective="">
       <h3 className={css.heading}>{t('windows.perspective.title')}</h3>
@@ -371,22 +420,7 @@ function PerspectiveBlock({ t, settings, savePerspective, defaultPerspective }: 
       <p className={css.warn} data-perspective-warn="">{t('windows.perspective.warn')}</p>
       <p className={css.note} data-perspective-protocol="">{t('windows.perspective.protocol')}</p>
       <p className={css.note} data-perspective-scope="">{t('windows.perspective.scope')}</p>
-      <p className={css.note} data-perspective-per-project="">
-        {t('windows.perspective.perProject')}
-        {' '}
-        <Button
-          variant="outline"
-          size="sm"
-          data-perspective-per-project-jump=""
-          onClick={() => {
-            const block = document.getElementById(HOOK_BLOCK_ID)
-            // jsdom has no layout, so the scroll is best-effort everywhere.
-            block?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-          }}
-        >
-          {t('windows.perspective.perProject.jump')}
-        </Button>
-      </p>
+      <p className={css.note} data-perspective-per-project="">{t('windows.perspective.perProject')}</p>
       <p className={css.note} data-perspective-lock="">{t('windows.perspective.notLocked')}</p>
       {settings.status === 'loading' && <p className={css.note} data-perspective-loading="">{t('windows.perspective.loading')}</p>}
       {settings.status === 'unavailable' && (
@@ -407,7 +441,7 @@ function PerspectiveBlock({ t, settings, savePerspective, defaultPerspective }: 
         {isDefault ? t('windows.perspective.current.default') : t('windows.perspective.current.custom')}
       </p>
       <p className={css.note} data-perspective-effective-label="">{t('windows.perspective.effective')}</p>
-      <pre className={css.raw} data-perspective-effective="">{effective}</pre>
+      <pre className={css.raw} data-perspective-effective="">{isDefault ? t('windows.perspective.none') : effective}</pre>
       {!settings.writable && settings.status === 'ready' && (
         <p className={css.warn} data-perspective-readonly="">{t('windows.perspective.readonly')}</p>
       )}
@@ -452,7 +486,7 @@ function PerspectiveBlock({ t, settings, savePerspective, defaultPerspective }: 
  * @param props - slot runtime, locale, and the page's injected face.
  */
 export function WindowReviewSection({
-  t, useReviewSettings, useWindowHooks, loadSettings, loadHooks, savePerspective, defaultPerspective,
+  t, useReviewSettings, useWindowHooks, loadSettings, loadHooks, savePerspective,
 }: WindowReviewSectionProps): ReactNode {
   const settings = useReviewSettings(snapshot => snapshot)
   const hooks = useWindowHooks(snapshot => snapshot)
@@ -469,7 +503,6 @@ export function WindowReviewSection({
         t={t}
         settings={settings}
         savePerspective={savePerspective}
-        defaultPerspective={defaultPerspective}
       />
     </div>
   )

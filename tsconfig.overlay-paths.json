@@ -39,6 +39,15 @@
       "@psychiiii/dsh-three-window-review/workspace-prompt": [
         "./packages/personal-review/src/workspace-prompt.ts"
       ],
+      "@psychiiii/dsh-three-window-review/review-guidance": [
+        "./packages/personal-review/src/review-guidance.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/report-markdown": [
+        "./packages/personal-review/src/report-markdown.ts"
+      ],
+      "@psychiiii/dsh-three-window-review/manifest": [
+        "./packages/personal-review/src/manifest.ts"
+      ],
       "@psychiiii/dsh-three-window-review/types": [
         "./packages/personal-review/src/types.ts"
       ],

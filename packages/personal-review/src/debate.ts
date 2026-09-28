@@ -3,7 +3,7 @@
  * @module @psychiiii/dsh-three-window-review/debate
  */
 
-import type { ResolvedBaseline } from './baseline.ts'
+import type { ResolvedMaterial } from './material.ts'
 import type { SeatCompleteRequest, SeatTextResult } from './complete.ts'
 import {
   conclusionsChanged, snapshotConclusions, terminalState, uniqueModelCount,
@@ -11,10 +11,11 @@ import {
 import { labelFindings, mergeFindings, mergedFindingKey, type LabeledFinding } from './findings.ts'
 import { parseSeatJson, type ParsedChallenge, type ParsedInitial } from './parse.ts'
 import { buildChallengeUserPrompt, buildInitialUserPrompt, DEBATE_SYSTEM_PROMPT } from './prompts.ts'
-import { renderDebateReport } from './report.ts'
+import { GROUPING_SYSTEM_PROMPT, groupFindings, type GroupingCompleter } from './grouping.ts'
+import { renderReportMarkdown, type ReportSource } from './report-markdown.ts'
 import type {
-  ChallengeVerdict, DebatePromptRecord, DebateReport, DebateRound, GroupingMode,
-  MergedFinding, ReviewFinding, SeatAudit, SeatRoundResult,
+  ChallengeVerdict, DebatePromptRecord, DebateReport, DebateRound, DropoutCause, GroupingMode,
+  MergedFinding, ReviewFinding, ReviewProgressEvent, ReviewScopeText, SeatAudit, SeatDropout, SeatRoundResult, StopReason,
 } from './types.ts'
 import { MAX_DEBATE_ROUNDS } from './types.ts'
 
@@ -33,19 +34,19 @@ export type DebateCompleter = (request: SeatCompleteRequest) => Promise<SeatText
 /** Inputs for {@link runDebate}. */
 export interface DebateInput {
   readonly debateId: string
-  readonly baseline: ResolvedBaseline
+  /** The frozen material every seat receives. */
+  readonly material: ResolvedMaterial
   readonly seats: readonly DebateSeat[]
   readonly maxRounds: number
   readonly maxParallel: number
   readonly maxTokens: number
+  /** Overall cap on one seat call, however much it is producing. */
   readonly timeoutMs: number
+  /** Abort a seat only after this long without any output; `0` never. */
+  readonly idleTimeoutMs?: number
   readonly grouping: GroupingMode
-  /**
-   * Configured review perspective, straight from settings. Blank falls back to
-   * the built-in default inside the prompt builders, so the seats always
-   * receive exactly one perspective section.
-   */
-  readonly perspective: string
+  /** The standing guidance (layer 2) and this review's request (layer 3), with the guidance's source. */
+  readonly scope: ReviewScopeText
   /**
    * The review window's output language tag. Blank or absent adds nothing;
    * a tag adds one fixed line about the natural-language fields.
@@ -53,12 +54,22 @@ export interface DebateInput {
   readonly outputLanguage?: string
   readonly signal: AbortSignal
   readonly complete: DebateCompleter
+  /**
+   * The grouping call after the rounds (`grouping.ts`); absent, the findings
+   * are listed ungrouped. Seats never see it and it sees no seat.
+   */
+  readonly groupIssues?: GroupingCompleter
+  /** The route of `groupIssues`, recorded in the report (the dialog shows it; the coordinator's copy does not). */
+  readonly groupingRoute?: { readonly provider: string; readonly model: string }
+  /** Told when the review starts and after each round; the tool records it for the review panel. */
+  readonly onProgress?: (event: Omit<ReviewProgressEvent, 'callId'>) => void
 }
 
 interface SeatOutcome {
   readonly seatId: string
   readonly ok: boolean
   readonly error?: string
+  readonly cause?: DropoutCause
   readonly finish?: string
   readonly elapsedMs: number
   readonly value?: ParsedInitial | ParsedChallenge
@@ -157,18 +168,32 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
   let labeled: LabeledFinding[] = []
   let previous = snapshotConclusions([], grouping)
   let lastChallenges = new Map<string, ChallengeVerdict[]>()
-  const failures: string[] = []
+  const dropouts: SeatDropout[] = []
+  // A failed seat leaves the later rounds; the review goes on while enough
+  // seats remain to corroborate and challenge each other (two, or the one
+  // seat of a single-seat review).
+  let active = [...input.seats]
+  let stopReason: StopReason = singleSeat ? 'single-round' : 'round-cap'
+  let stoppedShort = false
   let converged = false
 
   for (let round = 1; round <= roundLimit; round += 1) {
     const mode = round === 1 ? 'initial' : 'challenge'
+    if (round === 1) {
+      input.onProgress?.({
+        phase: 'started', round, maxRounds: roundLimit, seats: input.seats.length,
+        remaining: active.length, dropped: [], continuing: true,
+      })
+    }
     const promptLabeled = labeled
-    const roundPrompts: DebatePromptRecord[] = new Array(input.seats.length)
+    const roundPrompts: DebatePromptRecord[] = new Array(active.length)
     const roundStarted = Date.now()
-    const outcomes = await mapPool(input.seats, input.maxParallel, async (seat, index) => {
+    const roundSeats = active
+    const outcomes = await mapPool(roundSeats, input.maxParallel, async (seat, index) => {
+      const ask = { guidance: input.scope.guidance, request: input.scope.request }
       const user = mode === 'initial'
-        ? buildInitialUserPrompt(seat.role, input.baseline, input.perspective, input.outputLanguage)
-        : buildChallengeUserPrompt(seat.role, input.baseline, promptLabeled, input.perspective, input.outputLanguage)
+        ? buildInitialUserPrompt(seat.role, input.material, ask, input.outputLanguage)
+        : buildChallengeUserPrompt(seat.role, input.material, promptLabeled, ask, input.outputLanguage)
       roundPrompts[index] = {
         round,
         seatId: seat.seatId,
@@ -185,23 +210,26 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
         user,
         maxTokens: input.maxTokens,
         signal,
+        ...input.idleTimeoutMs !== undefined ? { idleTimeoutMs: input.idleTimeoutMs } : {},
         ...seat.reasoningEffort !== undefined ? { reasoningEffort: seat.reasoningEffort } : {},
       }
       const started = Date.now()
       const text = await input.complete(request)
       const elapsedMs = Date.now() - started
       if (!text.ok) {
+        const overall = timeout.aborted && !input.signal.aborted
         return {
           seatId: seat.seatId,
           ok: false,
-          error: text.error,
+          error: overall ? `seat reached the overall limit of ${String(Math.round(input.timeoutMs / 60_000))} min` : text.error,
+          cause: overall ? 'overall' : text.idle === true ? 'idle' : 'call',
           elapsedMs,
           ...text.finish !== undefined ? { finish: text.finish } : {},
         } satisfies SeatOutcome
       }
       const parsed = parseSeatJson(text.text, {
         mode,
-        baselineId: input.baseline.id,
+        baselineId: input.material.id,
         ...mode === 'challenge' ? { expectedTargets: promptLabeled.map(item => item.label) } : {},
       })
       if (!parsed.ok) {
@@ -209,6 +237,7 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
           seatId: seat.seatId,
           ok: false,
           error: parsed.error,
+          cause: 'format',
           elapsedMs,
           finish: text.finish,
         } satisfies SeatOutcome
@@ -223,12 +252,17 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
     })
     prompts.push(...roundPrompts)
 
+    const droppedNow: SeatDropout[] = []
     for (const row of outcomes) {
-      if (!row.ok) failures.push(row.error ?? 'seat failed')
+      if (!row.ok) {
+        droppedNow.push({ seatId: row.seatId, round, error: row.error ?? 'seat failed', cause: row.cause ?? 'call' })
+      }
       else if (row.value !== undefined) {
         collected.push({ seatId: row.seatId, findings: row.value.findings })
       }
     }
+    dropouts.push(...droppedNow)
+    active = roundSeats.filter(seat => outcomes.some(row => row.seatId === seat.seatId && row.ok))
 
     const split = mergeFindings(collected, grouping)
     const allFindings = [...split.findings, ...split.dissent]
@@ -252,13 +286,24 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
       : new Map()
     labeled = labelFindings(split.findings, split.dissent)
 
-    if (failures.length > 0) break
+    const tooFew = active.length < (singleSeat ? 1 : 2)
+    const continuing = !tooFew && changed && round < roundLimit
+    input.onProgress?.({
+      phase: 'round-done', round, maxRounds: roundLimit, seats: input.seats.length,
+      remaining: active.length, dropped: droppedNow, continuing,
+    })
+    if (tooFew) {
+      stopReason = 'seat-failure'
+      stoppedShort = true
+      break
+    }
     if (!changed) {
       converged = true
+      stopReason = singleSeat ? 'single-round' : 'converged'
       break
     }
     if (round === roundLimit) {
-      converged = singleSeat && failures.length === 0
+      converged = singleSeat
     }
   }
 
@@ -268,37 +313,43 @@ export async function runDebate(input: DebateInput): Promise<DebateReport> {
     : merged
   const allFindings = [...split.findings, ...split.dissent]
   const terminal = terminalState({
-    seatFailures: failures,
+    seatFailures: stoppedShort ? dropouts.map(row => row.error) : [],
     findings: allFindings,
     grouping,
     challengesByKey: lastChallenges,
   })
-  const report = renderDebateReport({
-    debateId: input.debateId,
-    baselineId: input.baseline.id,
-    grouping,
-    terminal,
-    converged,
-    roundsUsed: rounds.length,
-    reviewKind,
-    findings: split.findings,
-    dissent: split.dissent,
-    rounds,
+  const grouped = input.groupIssues === undefined
+    ? { status: 'failed' as const, error: 'no grouping call is available', prompts: [] }
+    : await groupFindings(allFindings, input.material.manifest, input.outputLanguage, input.groupIssues)
+  grouped.prompts.forEach((user, index) => {
+    prompts.push({ round: roundLimit + 1 + index, seatId: 'grouping', system: GROUPING_SYSTEM_PROMPT, user })
   })
-  return {
+  const fields: ReportSource = {
     debateId: input.debateId,
-    baselineId: input.baseline.id,
+    baselineId: input.material.id,
+    manifest: input.material.manifest,
+    request: input.scope.request,
+    guidance: input.scope.guidance,
+    guidanceSource: input.scope.guidanceSource,
     grouping,
     terminal,
     converged,
     roundsUsed: rounds.length,
+    stopReason,
+    dropouts,
     reviewKind,
     uniqueModelCount: modelCount,
     findings: split.findings,
     dissent: split.dissent,
     rounds,
-    report,
     seats: audit,
-    prompts,
+    ...grouped.groups !== undefined ? { groups: grouped.groups } : {},
+    issueGrouping: {
+      status: grouped.status,
+      ...grouped.error !== undefined ? { error: grouped.error } : {},
+      ...grouped.status !== 'not-needed' && input.groupingRoute !== undefined ? input.groupingRoute : {},
+    },
+    language: input.outputLanguage ?? '',
   }
+  return { ...fields, report: renderReportMarkdown(fields, { audience: 'coordinator' }), prompts }
 }

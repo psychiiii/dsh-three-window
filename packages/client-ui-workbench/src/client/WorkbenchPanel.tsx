@@ -7,6 +7,7 @@ import type {
 import type { WorkbenchInjected } from './service.ts'
 import { WORKBENCH_PANE_ROLES } from './windows.ts'
 import { PaneLanguageSelector } from './PaneLanguageSelector.tsx'
+import type { PaneViewsView } from './pane-view.ts'
 import css from './WorkbenchPanel.module.css'
 
 /** Full composed props for the workbench occupant. */
@@ -25,14 +26,54 @@ export type WorkbenchPanelProps =
  * @param props - main-slot runtime, Conversation child, locale, and workbench inject.
  * @returns the three-pane occupant.
  */
+/**
+ * Switch between the Conversation Views dsh lists (chat, and the trajectory
+ * while developer tools are on). dsh's own tabs live in the Session header,
+ * which the panes do not render, so without this a pane moved to the
+ * trajectory by a tool row's Inspect action could not come back.
+ * @param props - the pane's Session, the Views, the selector, and the translator.
+ * @returns the switch.
+ */
+function PaneViewSwitch({ sessionId, view, select, t }: {
+  sessionId: string
+  view: PaneViewsView
+  select: (sessionId: string, view: string) => void
+  t: WorkbenchPanelProps['t']
+}): ReactNode {
+  const active = view.viewOf(sessionId)
+  return (
+    <span className={css.viewSwitch} role="tablist" aria-label={t('view.aria')} data-workbench-view-switch="">
+      {view.tabs.map(tab => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={tab.id === active}
+          className={tab.id === active ? `${css.viewTab ?? ''} ${css.viewTabActive ?? ''}` : css.viewTab}
+          data-workbench-view={tab.id}
+          onClick={(event) => {
+            // The pane itself takes clicks to focus its window.
+            event.stopPropagation()
+            select(sessionId, tab.id)
+          }}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </span>
+  )
+}
+
 export function WorkbenchPanel({
-  renderSlot, SessionProvider, useWorkbench, useSessions, usePaneLanguages, saveOutputLanguage, focus, t,
+  renderSlot, SessionProvider, useWorkbench, useSessions, usePaneLanguages, usePaneViews, saveOutputLanguage,
+  selectPaneView, focus, t,
 }: WorkbenchPanelProps): ReactNode {
   const panes = useWorkbench(snapshot => snapshot.panes)
   const bootstrapError = useWorkbench(snapshot => snapshot.bootstrapError)
   const focusedSessionId = useWorkbench(snapshot => snapshot.focusedSessionId)
   const noWorkspace = useWorkbench(snapshot => snapshot.noWorkspace)
   const languages = usePaneLanguages(view => view)
+  const views = usePaneViews(view => view)
   const listed = useSessions(state => state.byId)
   if (noWorkspace && panes.every(pane => pane.sessionId === undefined)) {
     return (
@@ -98,6 +139,9 @@ export function WorkbenchPanel({
             <div className={css.chrome}>
               <span className={css.role}>{t(`pane.${role}`)}</span>
               {pane.title.length > 0 ? <span className={css.title}>{pane.title}</span> : null}
+              {state === 'bound' && sessionId !== undefined && views.tabs.length > 1 && (
+                <PaneViewSwitch sessionId={sessionId} view={views} select={selectPaneView} t={t} />
+              )}
               <PaneLanguageSelector index={index} view={languages} save={saveOutputLanguage} t={t} />
             </div>
             {body}

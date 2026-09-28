@@ -4,8 +4,8 @@
  */
 
 import {
-  CHALLENGE_VERDICTS, MAX_SEAT_STRING_CHARS, VERDICT_VALUES,
-  type ChallengeRow, type ChallengeVerdict, type ReviewFinding, type VerdictValue,
+  CHALLENGE_VERDICTS, MAX_SEAT_STRING_CHARS, REVIEW_SCOPES, VERDICT_VALUES,
+  type ChallengeRow, type ChallengeVerdict, type ReviewFinding, type ReviewScope, type VerdictValue,
 } from './types.ts'
 
 const FENCE = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/
@@ -61,6 +61,11 @@ function asChallenge(value: unknown): ChallengeVerdict | undefined {
   return (CHALLENGE_VERDICTS as readonly string[]).includes(value) ? value as ChallengeVerdict : undefined
 }
 
+/** `scope` is optional: absent or unrecognised reads as `focus`, so a seat that leaves it out still counts. */
+function asScope(value: unknown): ReviewScope {
+  return typeof value === 'string' && (REVIEW_SCOPES as readonly string[]).includes(value) ? value as ReviewScope : 'focus'
+}
+
 function parseString(value: unknown, label: string): { ok: true; value: string } | { ok: false; error: string } {
   if (typeof value !== 'string') return { ok: false, error: `missing or invalid ${label}` }
   if (value.length > MAX_SEAT_STRING_CHARS) {
@@ -82,7 +87,7 @@ function parseFindings(value: unknown): { ok: true; value: ReviewFinding[] } | {
     if (!evidence.ok) return evidence
     const claim = parseString(item.claim, `findings[${String(index)}].claim`)
     if (!claim.ok) return claim
-    findings.push({ severity, evidence: evidence.value, claim: claim.value })
+    findings.push({ severity, evidence: evidence.value, claim: claim.value, scope: asScope(item.scope) })
   }
   return { ok: true, value: findings }
 }

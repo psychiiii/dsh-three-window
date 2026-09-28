@@ -28,7 +28,12 @@ import {
 import { outputLanguagesFromSection } from '@psychiiii/dsh-three-window-review/output-language'
 import { workspacePromptsFromSection } from '@psychiiii/dsh-three-window-review/workspace-prompt'
 import { applyTurnInjections } from './turn-injections.ts'
+import { applyPromptFilter } from './prompt-filter.ts'
 
+export {
+  BASH_SECTION, HARNESS_SOURCE_SECTION, WEB_SURFACE_DEVELOPER_PART, WEB_SURFACE_SECTION,
+  applyPromptFilter, withoutDeveloperSections,
+} from './prompt-filter.ts'
 export {
   OUTPUT_LANGUAGE_SOURCE_KIND, WORKSPACE_PROMPT_SOURCE_KIND,
   applyTurnInjections, turnInjections, workspacePromptFor,
@@ -45,14 +50,15 @@ export const Config = ReviewSettingsConfig
 export type Config = import('@psychiiii/dsh-three-window-review/settings').ReviewSettingsConfig
 
 /**
- * Provide `ctx.reviewSettings`, append the per-turn context on each window's
- * turns, and turn off the generated settings form for this row: the
+ * Provide `ctx.reviewSettings`, leave dsh's developer-only prompt sections out
+ * of every window, append the per-turn context on each window's turns, and turn off the generated settings form for this row: the
  * 「窗口与评审」 page, the General rows, and the Workspace menu are its editors.
  * @param ctx - host context.
  * @param config - the row's resolved Config.
  */
 export function apply(ctx: Context, config: Config): void {
   provideReviewSettings(ctx, config)
+  applyPromptFilter(ctx)
   ctx.inject(['sessionProjections'], (child) => {
     applyTurnInjections(child, () => ({
       languages: outputLanguagesFromSection({ outputLanguage: config.outputLanguage.get() }),

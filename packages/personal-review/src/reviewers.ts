@@ -38,8 +38,9 @@ export interface ReviewerSettingsRow {
 export interface ReviewSettings {
   readonly reviewers: readonly ReviewerSettingsRow[]
   /**
-   * Free text appended to every seat's perspective section. Blank means the
-   * built-in default perspective; see `resolvePerspective` in `prompts.ts`.
+   * Default standing review guidance, for Workspaces without their own
+   * (historically called the perspective). Blank means none; see `guidanceFor`
+   * in `index.ts`.
    */
   readonly perspective: string
 }

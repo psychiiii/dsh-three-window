@@ -25,7 +25,7 @@
 }
 
 .meta {
-  color: var(--dsw-alias-label-l2, #666);
+  color: var(--dsw-alias-label-secondary, #666);
 }
 
 .modalBody {
@@ -61,14 +61,14 @@
   height: 28px;
   border: 0.5px solid var(--dsw-alias-border-l1, #ddd);
   border-radius: 8px;
-  background: var(--dsw-alias-bg-primary, #fff);
+  background: var(--dsw-alias-button-elevated-fill, #fff);
   color: var(--dsw-alias-label-primary, #111);
   padding: 0 8px;
 }
 
 .persona {
   font-size: 12px;
-  color: var(--dsw-alias-label-l2, #666);
+  color: var(--dsw-alias-label-secondary, #666);
 }
 
 .persona summary {
@@ -85,7 +85,7 @@
   padding: 6px 8px;
   border: 0.5px solid var(--dsw-alias-border-l1, #ddd);
   border-radius: 8px;
-  background: var(--dsw-alias-bg-primary, #fff);
+  background: var(--dsw-alias-button-elevated-fill, #fff);
   color: var(--dsw-alias-label-primary, #111);
   font: inherit;
   resize: vertical;
@@ -98,12 +98,124 @@
 }
 
 .error {
-  color: var(--dsw-alias-danger, #c00);
+  color: var(--dsw-alias-state-error-primary, #c00);
 }
 
 /* No reviewer model configured: the review window is locked until one is saved. */
 .needsConfig {
-  border-color: var(--dsw-alias-danger, #e5484d) !important;
-  box-shadow: 0 0 0 1px var(--dsw-alias-danger, #e5484d);
-  color: var(--dsw-alias-danger, #e5484d);
+  border-color: var(--dsw-alias-state-error-primary, #e5484d) !important;
+  box-shadow: 0 0 0 1px var(--dsw-alias-state-error-primary, #e5484d);
+  color: var(--dsw-alias-state-error-primary, #e5484d);
+}
+
+.headerActions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.guidanceInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 140px;
+  padding: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l1, #ddd);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-elevated-fill, #fff);
+  color: var(--dsw-alias-label-primary, #111);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+/* The original report inside its dialog: the dialog bounds the height, this scrolls. */
+.rawBody {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* The original-report dialog: about half the screen, never narrower than
+   dsh's own 380px dialog, never wider than a readable 960px, and 16px clear of
+   a narrow viewport's edges. The doubled class outranks the dialog's own width
+   whatever order the two stylesheets load in. */
+.rawDialog.rawDialog {
+  width: min(max(50vw, 380px), 960px, calc(100vw - 32px));
+  max-width: none;
+}
+
+.rawDialog .rawBody {
+  max-height: 70vh;
+  padding: 0 24px;
+  font-size: 14px;
+}
+
+.rawBody li[data-review-jumped] {
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.rawButton {
+  margin-top: 6px;
+}
+
+.jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px;
+  font-size: 12px;
+}
+
+.jumpLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.jumpLabel input {
+  width: 96px;
+}
+
+/* An uncited finding id: opens the dialog at that finding. */
+.idChip {
+  margin: 0 2px;
+  padding: 0 4px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.idChip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The run's status line: a blank line's worth of space above and below, in
+   the run's colour. The moving highlight is dsh's TextShimmer, which already
+   stops under reduced motion. */
+.status {
+  margin: 1.4em 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.status[data-review-status="complete"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.status[data-review-status="partial"] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.status[data-review-status="failed"] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.status[data-review-status="cancelled"] {
+  color: var(--dsw-alias-label-secondary);
 }

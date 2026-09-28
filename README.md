@@ -19,12 +19,20 @@ A three-window workbench plugin for [DeepSeek Harness](https://github.com/deepse
 - **Per-window hooks.** `.dsh/hooks/chat.json`, `construct.json`, and `review.json`
   in your project apply to one window each. Ready-made examples are in
   `examples/hooks/`.
-- **Anonymous multi-model review.** The review window runs every configured
-  reviewer model on the same change, blind to each other, and returns one report
-  with the verdict, all findings, and the ones only a single model raised.
-  Reviewer models are set with the review window's “Review models” button (the
-  window stays locked until at least one is set; a single one runs an ordinary
-  single-model review). The review perspective is edited in Settings → Windows & review.
+- **Anonymous multi-model review.** Tell the review window what to review, e.g.
+  “review the storyboard and the shot list, only the shot lengths”: it finds the
+  files in the workspace and asks you in a confirmation card listing each item,
+  why it was picked, and what was left out and why. Choose “start” and every
+  configured reviewer model reviews it on its own, blind to the others, for at
+  most three rounds (if one fails, the others go on), and you get the conclusion,
+  the agreed findings, and the disagreements in plain words; choose “change” and
+  say what you want instead. The original report opens from the review window. Not only code: documents,
+  translations, data, plans, storyboards and other text work, with or without git;
+  images, audio, video and Office files themselves are not reviewed. Reviewer
+  models are set with the “Review models” button (the window stays locked until
+  one is set; a single one runs an ordinary single-model review); each workspace's
+  standing guidance is set with “Review guidance”, and workspaces without their own
+  use the default in Settings → Windows & review.
 - **Model output language.** Each window can have its own language for the
   model's answers to you: pick it from “输出语言：…” at the top right of the
   window, or in Settings → General (the same setting). It governs only what the

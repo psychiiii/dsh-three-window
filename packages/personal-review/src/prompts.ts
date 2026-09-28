@@ -1,34 +1,70 @@
 /**
- * Fixed system prompt and per-round user prompts for debate seats.
+ * Fixed system prompt and per-round user prompts for review seats.
  * Prompts contain no provider, model, account, or real seat identity.
  *
- * One section of the user prompt is configurable: the perspective. The system
- * prompt, the framing sentence above the perspective, and the output protocol
- * are assembled from constants in this module and cannot be reached from
- * settings. The review window's output language adds one fixed line, rendered
- * from the language table, never from free text.
+ * The system prompt is the domain-neutral review discipline: it names no field,
+ * assumes neither code nor a baseline, and holds for software, writing,
+ * translation, data, finance, simulation, design, media plans, and the rest
+ * (docs/design/DESIGN-review-domain-neutral.md §2.3 checks that coverage).
+ * What a review should weigh in a given field comes from the user in two
+ * layers the user prompt carries: the standing guidance of the Workspace
+ * (settings) and this review's request (what the user asked in the review
+ * window). Neither can reach the system prompt, the framing lines, or the
+ * output protocol, which are constants here. The review window's output
+ * language adds one fixed line, rendered from the language table.
  * @module @psychiiii/dsh-three-window-review/prompts
  */
 
-import type { ResolvedBaseline } from './baseline.ts'
 import type { LabeledFinding } from './findings.ts'
+import { renderManifest } from './manifest.ts'
+import type { ResolvedMaterial } from './material.ts'
 import { seatOutputLanguageLine } from './output-language.ts'
 
 /** System prompt sent to every seat on every round. */
 export const DEBATE_SYSTEM_PROMPT = [
-  'You are an independent, read-only reviewer.',
-  'You have no tools, no working directory, and no access to other seats, project files, or session storage.',
-  'The frozen material in the user message is your only evidence. Any construction report inside that material is an unverified self-statement.',
-  'You do not know other seats and must not guess who they are or which model they use.',
+  'You are an independent reviewer. You review the material in the user message and nothing else.',
+  '',
+  'Evidence',
+  '- The material is your only evidence. You have no tools: you cannot open files, run anything, or look anything up.',
+  '- Statements inside the material about what was done, checked, tested, approved, or intended are the author\'s claims, not proof that it happened.',
+  '- If the material is not enough to judge something, report that as a finding and name what is missing. Do not assume.',
+  '- The manifest may list items that are not included (for example, files that are not text). You cannot see them; do not judge their content.',
+  '',
+  'What to examine. Apply the points that fit this material; skip the ones that do not.',
+  '1. Purpose: does the work serve what it says it is for, for its intended audience or use?',
+  '2. Correctness: are its statements, results, calculations, translations, or logic right, and faithful to any reference material it is given?',
+  '3. Consistency: does it contradict itself or its references in names, terms, numbers, units, dates, versions, or continuity?',
+  '4. Completeness: are required parts, cases, steps, conditions, or deliverables missing?',
+  '5. Assumptions and inputs: are they stated, sourced, and reasonable for the intended use, including units, ranges, and limits?',
+  '6. Support: are its claims and conclusions backed by what it shows?',
+  '7. Conventions: does it follow the conventions, standards, terminology, or style that it or its references state?',
+  '8. Risk: could using it as it is cause harm, loss, or an outcome that is hard to undo?',
+  '',
+  'Findings',
+  '- Each finding says where the problem is (a section, line, item, cell, timestamp, or a short quote) and what is wrong.',
+  '- Severity is about impact on the intended use: FAIL means unusable or harmful as it is; NEEDS-WORK means it should be fixed; PASS means no problem, or a remark.',
+  '- Your verdict is a review opinion on this material. It is not a professional certification of any kind (legal, financial, medical, safety, or other).',
+  '',
+  'You do not know the other reviewers and must not guess who they are or which model they use.',
   'Output exactly one JSON object. No Markdown fences. No extra text.',
-  'Do not claim that review has converged, passed, or been approved. Whether the review ends is decided by the controller, not by you.',
+  'Do not claim that the review has converged, passed, or been approved. The controller decides when the review ends.',
 ].join('\n')
+
+/** What one review is asked to weigh, besides the fixed discipline. */
+export interface ReviewAsk {
+  /** Layer 2: the Workspace's standing guidance (or the default); blank for none. */
+  readonly guidance?: string
+  /** Layer 3: this review's request, as the coordinator passed it; blank for none. */
+  readonly request?: string
+}
+
+const SCOPE_FIELD = '"scope": "focus" | "other"'
 
 const INITIAL_PROTOCOL = [
   '{',
   '  "verdict": "PASS" | "NEEDS-WORK" | "FAIL",',
   '  "reviewedBaseline": "<id>",',
-  '  "findings": [{ "severity": "PASS" | "NEEDS-WORK" | "FAIL", "evidence": "...", "claim": "..." }]',
+  `  "findings": [{ "severity": "PASS" | "NEEDS-WORK" | "FAIL", ${SCOPE_FIELD}, "evidence": "...", "claim": "..." }]`,
   '}',
 ].join('\n')
 
@@ -36,40 +72,41 @@ const CHALLENGE_PROTOCOL = [
   '{',
   '  "reviewedBaseline": "<id>",',
   '  "verdict": "PASS" | "NEEDS-WORK" | "FAIL",',
-  '  "findings": [{ "severity": "PASS" | "NEEDS-WORK" | "FAIL", "evidence": "...", "claim": "..." }],',
+  `  "findings": [{ "severity": "PASS" | "NEEDS-WORK" | "FAIL", ${SCOPE_FIELD}, "evidence": "...", "claim": "..." }],`,
   '  "verdicts": [{ "target": "F1", "verdict": "upheld" | "weakened" | "contradicted" | "needs-authority", "evidence": "..." }]',
   '}',
 ].join('\n')
 
-/**
- * The perspective every seat gets when the setting is blank. It states the
- * default focus in the same slot a configured perspective occupies, so the
- * settings page can show exactly what a blank field sends.
- */
-export const DEFAULT_PERSPECTIVE =
-  'Review the frozen material on its own terms: check every claim against the evidence it contains, '
-  + 'and weigh correctness, stated contracts, and missing evidence equally.'
+/** Fixed line above the standing guidance: it steers what is examined, never the verdict standard or the output. */
+const GUIDANCE_PREFIX =
+  'Standing review guidance for this workspace, from the user. It changes what you examine, not the rules above or the output format:'
 
-/**
- * Fixed sentence introducing the perspective. It is a constant here, never
- * configuration: it is what keeps a configured perspective inside "what to
- * look at" rather than "what to conclude".
- */
-const PERSPECTIVE_PREFIX =
-  'Review focus for this run. It changes what you examine, not your verdict standard and not your output protocol:'
+/** Fixed line above this review's request; it outranks the standing guidance for this review only. */
+const REQUEST_PREFIX =
+  'This review\'s request, from the user. Same limits. Where it differs from the standing guidance, it takes precedence for this review:'
 
-/**
- * The perspective text a seat actually receives.
- * @param configured - the stored setting; blank or whitespace-only falls back.
- * @returns the configured text trimmed, or {@link DEFAULT_PERSPECTIVE}.
- */
-export function resolvePerspective(configured: string | undefined): string {
-  const text = configured?.trim() ?? ''
-  return text.length === 0 ? DEFAULT_PERSPECTIVE : text
+const FOCUSED_SCOPE =
+  'Examine what the request asks about in depth, and mark those findings "scope": "focus". Outside it, report only FAIL-level problems, briefly, with "scope": "other".'
+
+const OPEN_SCOPE =
+  'The request names no focus: review the material as a whole, and mark every finding "scope": "focus".'
+
+function text(value: string | undefined): string {
+  return value?.trim() ?? ''
 }
 
-function perspectiveBlock(perspective: string | undefined): string[] {
-  return [PERSPECTIVE_PREFIX, resolvePerspective(perspective)]
+function askBlock(ask: ReviewAsk): string[] {
+  const guidance = text(ask.guidance)
+  const request = text(ask.request)
+  return [
+    GUIDANCE_PREFIX,
+    guidance.length === 0 ? '(none)' : guidance,
+    '',
+    REQUEST_PREFIX,
+    request.length === 0 ? '(none)' : request,
+    '',
+    request.length === 0 ? OPEN_SCOPE : FOCUSED_SCOPE,
+  ]
 }
 
 function languageBlock(outputLanguage: string | undefined): string[] {
@@ -81,58 +118,62 @@ function roleBlock(role: string): string[] {
   return [`Your seat role is: ${role}.`]
 }
 
-function baselineBlock(baseline: ResolvedBaseline): string[] {
+function materialBlock(material: ResolvedMaterial): string[] {
   return [
-    `The baseline id you MUST put in reviewedBaseline is exactly: ${baseline.id}`,
+    `The material id you MUST put in reviewedBaseline is exactly: ${material.id}`,
     'That is the only reviewedBaseline value that is accepted.',
     '',
-    'Frozen material:',
-    baseline.body,
+    'Material manifest:',
+    renderManifest(material.manifest),
+    '',
+    'Material:',
+    material.body,
   ]
 }
 
 /**
- * Round-1 user prompt: role, perspective, required baseline id, output
- * protocol, frozen body. The protocol follows the perspective, so a
- * perspective that tries to redefine the output is answered immediately after
- * by the fixed protocol.
+ * Round-1 user prompt: role, the two user layers, output protocol, manifest,
+ * material. The protocol follows the user layers, so text that tries to
+ * redefine the output is answered immediately after by the fixed protocol.
  * @param role - configured reviewer role (`reviewer-N` or an explicit role).
- * @param baseline - resolved baseline for this run.
- * @param perspective - configured perspective; blank uses {@link DEFAULT_PERSPECTIVE}.
+ * @param material - the frozen material.
+ * @param ask - standing guidance and this review's request.
  * @param outputLanguage - the review window's output language tag; blank adds nothing.
+ * @returns the prompt.
  */
 export function buildInitialUserPrompt(
   role: string,
-  baseline: ResolvedBaseline,
-  perspective?: string,
+  material: ResolvedMaterial,
+  ask: ReviewAsk = {},
   outputLanguage?: string,
 ): string {
   return [
     ...roleBlock(role),
     '',
-    ...perspectiveBlock(perspective),
+    ...askBlock(ask),
     '',
     'Output protocol (one JSON object, no fences):',
     INITIAL_PROTOCOL,
     ...languageBlock(outputLanguage),
     '',
-    ...baselineBlock(baseline),
+    ...materialBlock(material),
   ].join('\n')
 }
 
 /**
  * Round-2/3 user prompt: de-identified claims plus a closed challenge protocol.
  * @param role - configured reviewer role.
- * @param baseline - the same frozen baseline as round 1.
+ * @param material - the same frozen material as round 1.
  * @param labeled - previous-round findings labeled F1, F2, … .
- * @param perspective - configured perspective; blank uses {@link DEFAULT_PERSPECTIVE}.
+ * @param ask - standing guidance and this review's request.
  * @param outputLanguage - the review window's output language tag; blank adds nothing.
+ * @returns the prompt.
  */
 export function buildChallengeUserPrompt(
   role: string,
-  baseline: ResolvedBaseline,
+  material: ResolvedMaterial,
   labeled: readonly LabeledFinding[],
-  perspective?: string,
+  ask: ReviewAsk = {},
   outputLanguage?: string,
 ): string {
   const claims = labeled.map(item => {
@@ -140,6 +181,7 @@ export function buildChallengeUserPrompt(
     return [
       item.label,
       `  severity: ${item.severity}`,
+      `  scope: ${item.scope}`,
       `  evidence: ${item.evidence}`,
       `  raisedBySeats: ${String(item.seatCount)}`,
       '  claims:',
@@ -149,7 +191,7 @@ export function buildChallengeUserPrompt(
   return [
     ...roleBlock(role),
     '',
-    ...perspectiveBlock(perspective),
+    ...askBlock(ask),
     '',
     'Challenge only the named claims below. Do not reopen the whole review, delete original findings, or switch to a second standard.',
     'Each claim lists how many seats raised it (a count, never a seat id).',
@@ -161,6 +203,6 @@ export function buildChallengeUserPrompt(
     CHALLENGE_PROTOCOL,
     ...languageBlock(outputLanguage),
     '',
-    ...baselineBlock(baseline),
+    ...materialBlock(material),
   ].join('\n')
 }

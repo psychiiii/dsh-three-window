@@ -1,13 +1,20 @@
 /**
- * Review dock: reviewer-model button (review window only) plus the latest debate report.
+ * Review dock (review window only): the reviewer-model and review-guidance
+ * buttons, and the latest review run — its progress, how it ended, and the
+ * original report in a dialog (`ReviewRunPanel.tsx`). The conclusion is only
+ * in the conversation. The list a review runs on is confirmed in dsh's own
+ * question dialog, which `review_debate` raises itself.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { REVIEW_PRESET, type ReviewerSettingsRow } from '@psychiiii/dsh-three-window-review/reviewers'
-import type { DebateReport, TerminalState } from '@psychiiii/dsh-three-window-review/types'
+import type { ReviewPanelState } from '@psychiiii/dsh-three-window-review/types'
+import { reviewGuidanceEntryFor } from '@psychiiii/dsh-three-window-review/review-guidance'
+import { GuidanceModal } from './GuidanceModal.tsx'
 import { ReviewerModal } from './ReviewerModal.tsx'
+import { ReviewRunPanel } from './ReviewRunPanel.tsx'
 import type { ReviewCatalogState, ReviewSettingsState } from './settings-store.ts'
 import css from './ReviewDock.module.css'
 
@@ -25,6 +32,8 @@ export interface ReviewDockInjected {
   loadCatalog: () => Promise<void>
   /** Persist reviewer rows against the revision the dialog was filled from. */
   saveSettings: (rows: readonly ReviewerSettingsRow[], expectedRevision?: number) => Promise<boolean>
+  /** Persist one Workspace's standing review guidance; blank removes it. */
+  saveGuidance: (root: string, text: string) => Promise<boolean>
   /** Hold or release the review window's composer lock (see composer-lock.ts). */
   lockComposer: (sessionId: string, locked: boolean, reason: string) => void
 }
@@ -34,27 +43,26 @@ export type ReviewDockProps =
   & PropsLocale<'personalReview'>
   & InjectFace<ReviewDockInjected>
 
-const TERMINAL_KEYS: Record<TerminalState, 'terminal.incomplete_review' | 'terminal.blocked_by_missing_decision' | 'terminal.changes_proposed' | 'terminal.clear_within_scope'> = {
-  incomplete_review: 'terminal.incomplete_review',
-  blocked_by_missing_decision: 'terminal.blocked_by_missing_decision',
-  changes_proposed: 'terminal.changes_proposed',
-  clear_within_scope: 'terminal.clear_within_scope',
-}
-
 /**
  * Review-window dock: configuration button, configured reviewers, latest debate report.
  * @param props - session dock runtime, locale, and settings face.
  */
 export function ReviewDock({
   sessionId, useSessions, useProjection, useReviewSettings, useReviewCatalog,
-  loadSettings, loadCatalog, saveSettings, lockComposer, t,
+  loadSettings, loadCatalog, saveSettings, saveGuidance, lockComposer, t,
 }: ReviewDockProps): ReactNode {
   const preset = useSessions((state) => {
     const value = state.byId[sessionId]?.projectionValues?.agentPreset
     return typeof value === 'string' ? value : undefined
   })
   const isReview = preset === REVIEW_PRESET
-  const review = useProjection('personalReview') as DebateReport | null | undefined
+  const cwd = useSessions((state) => {
+    const value = (state.byId[sessionId] as { cwd?: unknown } | undefined)?.cwd
+    return typeof value === 'string' ? value : undefined
+  })
+  const panel = useProjection('personalReview') as ReviewPanelState | null | undefined
+  const [guidanceOpen, setGuidanceOpen] = useState(false)
+  const [guidanceKey, setGuidanceKey] = useState(0)
   const settings = useReviewSettings(snapshot => snapshot)
   const catalog = useReviewCatalog(snapshot => snapshot)
   const [open, setOpen] = useState(false)
@@ -78,8 +86,10 @@ export function ReviewDock({
   useEffect(() => () => { lockComposer(sessionId, false, '') }, [lockComposer, sessionId])
 
   if (!isReview) return null
-  const singleRound = review !== undefined && review !== null
-    && review.reviewKind === 'single-model' && review.roundsUsed === 1
+  const own = reviewGuidanceEntryFor(settings.reviewGuidance, cwd)
+  const fallback = settings.perspective.trim()
+  const guidanceSource = own !== undefined ? 'workspace' : fallback.length > 0 ? 'default' : 'none'
+  const guidanceText = own?.text.trim() ?? fallback
 
   const openModal = (): void => {
     void loadSettings()
@@ -92,6 +102,20 @@ export function ReviewDock({
     <section className={css.root} data-personal-review="" data-review-window="true">
       <div className={css.header}>
         <span>{t('title')}</span>
+        <span className={css.headerActions}>
+        <Button
+          variant="outline"
+          size="sm"
+          data-review-guidance-button=""
+          disabled={cwd === undefined}
+          onClick={() => {
+            void loadSettings()
+            setGuidanceKey(key => key + 1)
+            setGuidanceOpen(true)
+          }}
+        >
+          {t('guidance.button')}
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -102,6 +126,14 @@ export function ReviewDock({
         >
           {t('config.button')}
         </Button>
+        </span>
+      </div>
+      <div className={css.meta} data-review-guidance={guidanceSource} title={guidanceText}>
+        {guidanceSource === 'none'
+          ? t('guidance.summary.none')
+          : t(guidanceSource === 'workspace' ? 'guidance.summary.workspace' : 'guidance.summary.default', {
+            text: guidanceText.length > 60 ? `${guidanceText.slice(0, 60)}…` : guidanceText,
+          })}
       </div>
       {/* The window cannot write even after the session permission preset is
           raised, so the fence is stated where the user meets the window. */}
@@ -130,94 +162,18 @@ export function ReviewDock({
             </ul>
           )}
       </div>
-      {review !== undefined && review !== null && (
-        <div data-review-terminal={review.terminal}>
-          <div className={css.header}>
-            <span>{t('terminal', { terminal: t(TERMINAL_KEYS[review.terminal]) })}</span>
-            <span className={css.meta}>{t('baseline', { id: review.baselineId })}</span>
-          </div>
-          <div className={css.meta} data-review-grouping={review.grouping}>
-            {t('grouping', { grouping: review.grouping })}
-          </div>
-          <div
-            className={css.meta}
-            data-review-kind={review.reviewKind}
-            data-review-stop={singleRound ? 'single' : review.converged ? 'early' : 'round-cap'}
-          >
-            {review.reviewKind === 'single-model' ? t('reviewKind.single') : t('reviewKind.multi')}
-            {' · '}
-            {t('stop', { value: singleRound ? t('stop.single') : review.converged ? t('stop.early') : t('stop.cap') })}
-          </div>
-          <div data-review-audit="">
-            <div>{t('audit')}</div>
-            <ul className={css.list}>
-              {review.seats.map(item => (
-                <li key={item.seatId} data-review-audit-row={item.seatId}>
-                  {t('audit.row', {
-                    seat: item.seatId,
-                    provider: item.provider,
-                    model: item.model,
-                    role: item.role,
-                  })}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <div>{t('findings')}</div>
-            {review.findings.length === 0
-              ? <div className={css.meta}>{t('empty.findings')}</div>
-              : (
-                <ul className={css.list}>
-                  {review.findings.map(item => (
-                    <li key={item.evidence}>
-                      {item.severity} {item.evidence} ({t('seatCount', { n: String(item.seatCount) })})
-                      <ul className={css.list}>
-                        {item.claims.map(claim => (
-                          <li key={claim.claim}>{claim.claim} ({t('seatCount', { n: String(claim.seats.length) })})</li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                </ul>
-              )}
-          </div>
-          <div data-review-dissent="">
-            <div>{t('dissent')}</div>
-            {review.dissent.length === 0
-              ? <div className={css.meta}>{t('empty.dissent')}</div>
-              : (
-                <ul className={css.list}>
-                  {review.dissent.map(item => (
-                    <li key={item.evidence}>
-                      {item.severity} {item.evidence} ({t('seatCount', { n: String(item.seatCount) })})
-                      <ul className={css.list}>
-                        {item.claims.map(claim => (
-                          <li key={claim.claim}>{claim.claim} ({t('seatCount', { n: String(claim.seats.length) })})</li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                </ul>
-              )}
-          </div>
-          <div data-review-rounds="">
-            <div>{t('rounds.title')}</div>
-            <ul className={css.list}>
-              {review.rounds.map(round => (
-                <li key={round.round}>
-                  {t('round', { n: String(round.round) })}
-                  {': '}
-                  {round.seats.map(seat => (
-                    seat.ok
-                      ? `${seat.seatId} ${t('kind.ok')}`
-                      : `${seat.seatId} ${t('kind.fail')}`
-                  )).join(', ')}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+      {panel !== undefined && panel !== null && <ReviewRunPanel panel={panel} t={t} />}
+      {guidanceOpen && cwd !== undefined && (
+        <GuidanceModal
+          key={guidanceKey}
+          open={guidanceOpen}
+          onClose={() => { setGuidanceOpen(false) }}
+          initial={own?.text ?? ''}
+          fallback={fallback}
+          writable={settings.writable}
+          onSave={text => saveGuidance(cwd, text)}
+          t={t}
+        />
       )}
       {open && (
         <ReviewerModal

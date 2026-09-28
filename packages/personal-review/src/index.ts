@@ -4,15 +4,14 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { isAbsolute, relative, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { z as zod } from 'zod'
-import type { ZodType } from 'zod'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import { resolveBaseline } from './baseline.ts'
+import { resolveMaterial } from './material.ts'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { assertGrouping, assertMaxRounds, assertNoModelOverride, selectReviewers } from './args.ts'
@@ -23,11 +22,20 @@ import {
   REVIEW_PRESET, REVIEW_SETTINGS_ENTRY, perspectiveFromSection, requireConfiguredReviewers,
   reviewersFromSection,
 } from './reviewers.ts'
+import { renderConfirmation } from './report.ts'
+import type { MaterialEntry } from './material.ts'
+import type {} from '@deepseek-ai/dsh-user-questions'
+import type { ReviewGuidanceEntry } from './review-guidance.ts'
 import type {} from './settings.ts'
-import { MAX_DEBATE_ROUNDS, type DebateReport, type GroupingMode } from './types.ts'
+import { foldPanel, initialPanel, panelStateSchema } from './panel.ts'
+import {
+  MAX_DEBATE_ROUNDS,
+  type GroupingMode, type ReviewPanelState, type ReviewScopeText,
+} from './types.ts'
 
 export type * from './types.ts'
-export { resolveBaseline, CONSTRUCT_REPORT, assertBaselineSize, sessionResolveOptions } from './baseline.ts'
+export { resolveMaterial, renderManifest, sessionResolveOptions, WORK_REPORT, MAX_MATERIAL_FILES } from './material.ts'
+export type { MaterialEntry, MaterialFs, MaterialLimits, MaterialRequest, ResolvedMaterial } from './material.ts'
 export {
   assertNoModelOverride, assertMaxRounds, assertGrouping, selectReviewers,
   FORBIDDEN_REVIEW_DEBATE_KEYS,
@@ -38,10 +46,18 @@ export { normalizeEvidence, findingKey, mergeFindings, labelFindings } from './f
 export { conclusionsChanged, snapshotConclusions, terminalState, uniqueModelCount } from './converge.ts'
 export { readSeatText, completeSeat, buildSeatGenerateOptions } from './complete.ts'
 export { runDebate } from './debate.ts'
-export { renderDebateReport } from './report.ts'
+export { renderConfirmation, CONFIRMATION_OPTIONS } from './report.ts'
 export {
-  DEBATE_SYSTEM_PROMPT, DEFAULT_PERSPECTIVE, buildInitialUserPrompt, buildChallengeUserPrompt,
-  resolvePerspective,
+  citedFindingIds, dropoutCause, findingIds, isChinese, renderReportMarkdown, runStatusOf,
+  type ReportAudience, type ReportSource,
+} from './report-markdown.ts'
+export { foldPanel, initialPanel, panelReportSchema, panelStateSchema, type PanelEvent } from './panel.ts'
+export {
+  GROUPING_SYSTEM_PROMPT, checkGrouping, groupFindings, groupingItems, groupingUserPrompt, namesDifferentSources,
+  toFindingGroups, type CheckedGrouping, type GroupingCompleter, type GroupingItem, type GroupingResult,
+} from './grouping.ts'
+export {
+  DEBATE_SYSTEM_PROMPT, buildInitialUserPrompt, buildChallengeUserPrompt, type ReviewAsk,
 } from './prompts.ts'
 export {
   EMPTY_REVIEWERS_MESSAGE, MAX_REVIEWERS, REVIEW_PRESET, REVIEW_SETTINGS_ENTRY,
@@ -56,6 +72,7 @@ export {
 } from './settings.ts'
 export * from './output-language.ts'
 export * from './workspace-prompt.ts'
+export * from './review-guidance.ts'
 
 export const name = 'personal-review'
 export const inject = ['tools', 'sessionProjections', 'llm', 'fs']
@@ -64,8 +81,10 @@ export const inject = ['tools', 'sessionProjections', 'llm', 'fs']
 export interface Config {
   /** Concurrent seat-call cap inside one round. */
   maxParallel: number
-  /** Per-seat timeout in ms, combined with the tool abort signal. */
+  /** Overall cap on one seat call in ms, however much it is producing. */
   timeoutMs: number
+  /** Abort a seat only after this many ms without any output; `0` never. */
+  idleTimeoutMs: number
   /** Inclusive UTF-8 byte cap on the resolved baseline body. */
   maxBaselineBytes: number
   /** Inclusive line cap on the resolved baseline body. */
@@ -83,7 +102,8 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   maxParallel: z.number().default(3),
-  timeoutMs: z.number().default(180_000),
+  timeoutMs: z.number().default(1_800_000),
+  idleTimeoutMs: z.number().default(120_000),
   maxBaselineBytes: z.number().default(262_144),
   maxBaselineLines: z.number().default(8_000),
   maxRounds: z.number().default(MAX_DEBATE_ROUNDS),
@@ -91,76 +111,70 @@ export const Config: z<Config> = z.object({
   grouping: z.union([z.const('evidence+claim' as const), z.const('evidence' as const)]).default('evidence'),
 })
 
-const findingSchema = zod.object({
-  severity: zod.union([zod.literal('PASS'), zod.literal('NEEDS-WORK'), zod.literal('FAIL')]),
-  evidence: zod.string(),
-  seatCount: zod.number(),
-  seats: zod.array(zod.string()),
-  claims: zod.array(zod.object({
-    claim: zod.string(),
-    seats: zod.array(zod.string()),
-  })),
-})
 
-const challengeSchema = zod.object({
-  target: zod.string(),
-  verdict: zod.union([
-    zod.literal('upheld'),
-    zod.literal('weakened'),
-    zod.literal('contradicted'),
-    zod.literal('needs-authority'),
-  ]),
-  evidence: zod.string(),
-})
+/** What the coordinator reads about `review_debate`; a spec holds it free of field-specific words. */
+export const REVIEW_DEBATE_DESCRIPTION =
+  'Anonymous multi-model review of material picked from what the user said, at most 3 rounds. '
+  + 'Pass material (what to review, each with why it was picked) and focus (what the user asked to be '
+  + 'looked at, in their words). The tool builds the exact list and asks the user itself, in a dialog, '
+  + 'before any reviewer model runs; it runs only if the user starts it. If the user asks for other material '
+  + 'or another focus, their words come back in the result: pick again and call again. '
+  + 'Material items are workspace paths, folders, or version-control revisions: a single revision such as '
+  + '"HEAD" is what that commit changed, "A..B" what changed between two revisions. Omit material for the '
+  + 'latest work: the work report, else the changes not yet recorded in version control. '
+  + 'Reviewer models come from the Review models settings; model, provider, agentOptions, maxTokens, '
+  + 'temperature, callTimeoutMs, and other seat-call overrides are errors. Optional: roles (subset of '
+  + 'configured reviewer roles), maxRounds 1–3, grouping "evidence+claim" or "evidence".'
 
-const reportSchema = zod.union([
-  zod.object({
-    debateId: zod.string(),
-    baselineId: zod.string(),
-    grouping: zod.union([zod.literal('evidence+claim'), zod.literal('evidence')]),
-    terminal: zod.union([
-      zod.literal('incomplete_review'),
-      zod.literal('blocked_by_missing_decision'),
-      zod.literal('changes_proposed'),
-      zod.literal('clear_within_scope'),
-    ]),
-    converged: zod.boolean(),
-    roundsUsed: zod.number(),
-    reviewKind: zod.union([zod.literal('single-model'), zod.literal('multi-model')]),
-    uniqueModelCount: zod.number(),
-    findings: zod.array(findingSchema),
-    dissent: zod.array(findingSchema),
-    rounds: zod.array(zod.object({
-      round: zod.number(),
-      changed: zod.boolean(),
-      seats: zod.array(zod.object({
-        seatId: zod.string(),
-        ok: zod.boolean(),
-        error: zod.string().optional(),
-        verdict: zod.union([zod.literal('PASS'), zod.literal('NEEDS-WORK'), zod.literal('FAIL')]).optional(),
-        findingCount: zod.number().optional(),
-        challenges: zod.array(challengeSchema).optional(),
-        finish: zod.string().optional(),
-        elapsedMs: zod.number().optional(),
-      })),
-      elapsedMs: zod.number(),
-    })),
-    report: zod.string(),
-    seats: zod.array(zod.object({
-      seatId: zod.string(),
-      provider: zod.string(),
-      model: zod.string(),
-      role: zod.string(),
-    })),
-    prompts: zod.array(zod.object({
-      round: zod.number(),
-      seatId: zod.string(),
-      system: zod.string(),
-      user: zod.string(),
-    })),
-  }),
-  zod.null(),
-]) as ZodType<DebateReport | null>
+/**
+ * The standing guidance in force for a working directory: the deepest
+ * Workspace root that holds it, else the default, else none.
+ * @param cwd - the review Session's working directory.
+ * @param entries - stored per-Workspace guidance.
+ * @param fallback - the default guidance (the historical perspective setting).
+ * @returns the text and where it came from.
+ */
+export function guidanceFor(
+  cwd: string,
+  entries: readonly ReviewGuidanceEntry[],
+  fallback: string,
+): Pick<ReviewScopeText, 'guidance' | 'guidanceSource'> {
+  const target = resolvePath(cwd)
+  let best: ReviewGuidanceEntry | undefined
+  let bestLength = -1
+  for (const entry of entries) {
+    const root = resolvePath(entry.root)
+    const inside = relative(root, target)
+    if (inside.startsWith('..') || isAbsolute(inside)) continue
+    if (root.length > bestLength) {
+      best = entry
+      bestLength = root.length
+    }
+  }
+  if (best !== undefined) return { guidance: best.text, guidanceSource: 'workspace' }
+  return fallback.trim().length > 0
+    ? { guidance: fallback, guidanceSource: 'default' }
+    : { guidance: '', guidanceSource: 'none' }
+}
+
+/**
+ * The picked material as the tool received it: `{ source, why }` objects, or
+ * bare strings from a coordinator that left the reason out.
+ * @param value - the `material` argument.
+ * @returns the entries, empty when absent.
+ */
+function materialEntries(value: unknown): MaterialEntry[] {
+  if (value === undefined) return []
+  const list = Array.isArray(value) ? value : [value]
+  return list.map((item) => {
+    if (typeof item === 'string') return { source: item }
+    if (item !== null && typeof item === 'object' && typeof (item as { source?: unknown }).source === 'string') {
+      const { source, why } = item as { source: string; why?: unknown }
+      return typeof why === 'string' && why.trim().length > 0 ? { source, why: why.trim() } : { source }
+    }
+    throw new Error('review_debate material items are { source, why } with source a workspace path, folder, or version-control revision')
+  })
+}
 
 /**
  * Fail at load when a Config field is out of range. Values are never truncated.
@@ -172,6 +186,9 @@ export function assertPluginConfig(config: Config): void {
   }
   if (!Number.isInteger(config.timeoutMs) || config.timeoutMs < 1) {
     throw new Error('personal-review config.timeoutMs must be a positive integer')
+  }
+  if (!Number.isInteger(config.idleTimeoutMs) || config.idleTimeoutMs < 0) {
+    throw new Error('personal-review config.idleTimeoutMs must be a non-negative integer (0 never aborts for silence)')
   }
   if (!Number.isInteger(config.maxBaselineBytes) || config.maxBaselineBytes < 1) {
     throw new Error('personal-review config.maxBaselineBytes must be a positive integer')
@@ -205,45 +222,41 @@ export function apply(ctx: Context, config: Config): void {
   assertPluginConfig(config)
   const maxParallel = config.maxParallel
   const timeoutMs = config.timeoutMs
+  const idleTimeoutMs = config.idleTimeoutMs
   const maxBaselineBytes = config.maxBaselineBytes
   const maxBaselineLines = config.maxBaselineLines
   const defaultMaxRounds = config.maxRounds
   const maxTokens = config.maxTokens
   const defaultGrouping = config.grouping
 
-  ctx.sessionProjections.register<'personalReview', DebateReport | null>({
+  ctx.sessionProjections.register<'personalReview', ReviewPanelState>({
     key: 'personalReview',
-    stateVersion: 3,
-    stateSchema: reportSchema,
-    init: () => null,
-    apply: (state, event) => {
-      if (event.type === 'tool/result') {
-        const meta = event.data.meta
-        if (meta === undefined || typeof meta !== 'object' || Array.isArray(meta)) return state
-        const record = meta as { debateId?: unknown }
-        if (typeof record.debateId !== 'string') return state
-        const parsed = reportSchema.safeParse(meta)
-        return parsed.success ? parsed.data : state
-      }
-      return state
-    },
-    wire: { viewSchema: reportSchema, view: state => state },
+    stateVersion: 4,
+    stateSchema: panelStateSchema,
+    init: initialPanel,
+    apply: (state, event) => foldPanel(state, event),
+    wire: { viewSchema: panelStateSchema, view: state => state },
   })
 
   ctx.tools.register(defineTool({
     name: 'review_debate',
-    description:
-      'Run an anonymous multi-model review debate of one baseline (at most 3 rounds) '
-      + 'and return a single report. Reviewer models come from the review-window '
-      + 'Review models settings; the caller must not pass model, provider, or agentOptions. '
-      + 'Passing maxTokens, temperature, callTimeoutMs, or other seat-call overrides is an error. '
-      + 'Optional arguments: baseline (git ref or file path) and roles (subset of configured reviewer roles). '
-      + 'Optional maxRounds is an integer 1–3; optional grouping is "evidence+claim" or "evidence". '
-      + 'Out-of-range values error instead of truncating.',
+    description: REVIEW_DEBATE_DESCRIPTION,
     parameters: {
-      baseline: {
+      material: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            source: { type: 'string', required: true, description: 'Workspace path or folder, or a version-control revision or range.' },
+            why: { type: 'string', description: 'Why this was picked, in a few words the user reads in the dialog.' },
+          },
+        },
+        description: 'What to review. Omit for the latest work.',
+      },
+      focus: {
         type: 'string',
-        description: 'Git commit, file path, or omit to use construct-report then HEAD.',
+        description: 'What the user asked to be looked at this time, in their words. Omit when they named nothing.',
       },
       roles: {
         type: 'array',
@@ -256,20 +269,21 @@ export function apply(ctx: Context, config: Config): void {
       },
       grouping: {
         type: 'string',
-        description: 'Finding merge mode: "evidence+claim" or "evidence". Omit to use plugin config.',
+        description: 'Finding merge mode, "evidence+claim" or "evidence". Omit to use plugin config.',
       },
     },
     output: {
       schema: { type: 'json' },
       render(_args, value) {
-        const row = value as unknown as DebateReport
+        const row = value as unknown as { report: string }
         return [{ type: 'text', text: row.report }]
       },
       presentationMeta(_args, value) {
         return value as JsonValue
       },
     },
-    timeoutMs: timeoutMs * MAX_DEBATE_ROUNDS,
+    // The per-seat cap applies to each round, plus time for the user to answer the dialog.
+    timeoutMs: timeoutMs * MAX_DEBATE_ROUNDS + 3_600_000,
     async execute(args, exec) {
       assertNoModelOverride(exec.arguments)
       const maxRounds = assertMaxRounds(args.maxRounds, defaultMaxRounds)
@@ -288,15 +302,21 @@ export function apply(ctx: Context, config: Config): void {
       if (settings === undefined) {
         throw new Error(`reviewer settings are unavailable: the ${JSON.stringify(REVIEW_SETTINGS_ENTRY)} row is not mounted`)
       }
+      const llm = ctx.llm
+      if (llm === undefined) {
+        throw new Error('review_debate requires ctx.llm to call reviewer models')
+      }
+      const fs = ctx.fs
+      if (fs === undefined) throw new Error('review_debate requires ctx.fs to read the material')
+      const questions = ctx.get('userQuestions')
+      if (questions === undefined) {
+        throw new Error('review_debate cannot ask the user to confirm: no user-questions service is mounted')
+      }
       const section = settings.current()
       const selected = selectReviewers(
         requireConfiguredReviewers(reviewersFromSection(section)),
         args.roles,
       )
-      const llm = ctx.llm
-      if (llm === undefined) {
-        throw new Error('review_debate requires ctx.llm to call reviewer models')
-      }
       await resolveReviewerModels(selected, {
         listModels: provider => llm.listModels(provider),
         listEfforts: async (provider, model) => {
@@ -304,32 +324,91 @@ export function apply(ctx: Context, config: Config): void {
           return info.reasoning?.efforts.map(effort => effort.id) ?? []
         },
       })
-      const fs = ctx.fs
-      if (fs === undefined) throw new Error('review_debate requires ctx.fs to resolve file baselines')
       const policy = ctx.get('sandboxPolicy')
-      const standing = policy?.resolve(exec.agent !== undefined ? { session: exec.agent.session } : {})
+      const standing = policy?.resolve({ session: agent.session })
       const sandboxMode: SandboxMode = standing?.mode ?? fs.sandboxMode ?? 'read-only'
-      const baseline = await resolveBaseline({
+      const material = await resolveMaterial({
         cwd,
-        ...typeof args.baseline === 'string' ? { explicit: args.baseline } : {},
+        entries: materialEntries(args.material),
         signal: exec.signal,
         fs,
         sandboxMode,
         observe: (target, observation) => { ctx.emit('fs/observed', target, observation, exec) },
       }, { maxBytes: maxBaselineBytes, maxLines: maxBaselineLines })
+      const scope: ReviewScopeText = {
+        request: typeof args.focus === 'string' ? args.focus.trim() : '',
+        ...guidanceFor(cwd, settings.reviewGuidance(), perspectiveFromSection(section)),
+      }
+      const language = settings.outputLanguages().review
+      const bytes = material.manifest.reduce((sum, item) => sum + (item.bytes ?? 0), 0)
+      const confirmation = renderConfirmation({
+        manifest: material.manifest, scope, reviewers: selected.length, bytes, maxBytes: maxBaselineBytes, language,
+      })
+      const [start, change] = confirmation.options
+      // The dialog shows what runs: this call asks, and only this call runs it.
+      const answer = await questions.ask({
+        questions: [{
+          id: 'review-confirm',
+          header: language.startsWith('zh') ? '确认评审' : 'Confirm review',
+          question: confirmation.question,
+          detail: confirmation.detail,
+          options: confirmation.options.map(label => ({ label })),
+        }],
+        agent,
+        signal: exec.signal,
+      })
+      const reply = answer.answers.find(item => item.id === 'review-confirm')
+      const chosen = reply?.selected[0]
+      const words = reply?.custom?.trim() ?? ''
+      if (chosen !== start) {
+        const wantsChange = chosen === change || words.length > 0
+        return {
+          outcome: wantsChange ? 'change-requested' : 'cancelled',
+          userWords: words,
+          report: wantsChange
+            ? `The user did not start the review and asked for a change${words.length > 0 ? `: "${words}"` : '.'} `
+              + 'Nothing was sent to any reviewer model. Adjust the material or focus from what they said and call review_debate again; ask them only if it is still unclear.'
+            : 'The user cancelled the review. Nothing was sent to any reviewer model.',
+        } as unknown as JsonValue
+      }
+      // The grouping call runs on the review window's own model, with no
+      // conversation, no tools, and no seat or model named (grouping.ts).
+      const route = agent.session.requestHeader()?.config
+      const groupIssues = route === undefined ? undefined : async (system: string, user: string) => {
+        const reply = await completeSeat(llm, {
+          seatId: 'grouping',
+          provider: route.provider,
+          model: route.model,
+          ...route.reasoningEffort !== undefined ? { reasoningEffort: route.reasoningEffort } : {},
+          system,
+          user,
+          maxTokens,
+          signal: AbortSignal.any([exec.signal, AbortSignal.timeout(timeoutMs)]),
+          idleTimeoutMs,
+        })
+        return reply.ok ? { ok: true as const, text: reply.text } : { ok: false as const, error: reply.error }
+      }
       const report = await runDebate({
         debateId: `debate-${randomUUID()}`,
-        baseline,
+        material,
         seats: toSeats(selected),
         maxRounds,
         maxParallel,
         maxTokens,
         timeoutMs,
+        idleTimeoutMs,
         grouping,
-        perspective: perspectiveFromSection(section),
-        outputLanguage: settings.outputLanguages().review,
+        scope,
+        outputLanguage: language,
         signal: exec.signal,
         complete: request => completeSeat(llm, request),
+        ...groupIssues !== undefined && route !== undefined
+          ? { groupIssues, groupingRoute: { provider: route.provider, model: route.model } }
+          : {},
+        // Log-only progress for the review panel: no surface operation, never model history.
+        onProgress: (progress) => {
+          agent.session.append('personal-review/progress', { callId: exec.callId, ...progress })
+        },
       })
       return report as unknown as JsonValue
     },
