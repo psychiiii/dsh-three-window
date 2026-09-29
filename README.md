@@ -1,5 +1,19 @@
 # dsh-three-window
 
+<p align="center">
+  <a href="https://github.com/psychiiii/dsh-three-window"><img src="https://img.shields.io/badge/Workbench-Chat%20%7C%20Construct%20%7C%20Review-orange" alt="Workbench · Chat | Construct | Review"></a>
+  <a href="https://github.com/psychiiii/dsh-three-window"><img src="https://img.shields.io/badge/Review-Anonymous%20Multi--Model-red" alt="Anonymous multi-model review"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek_Harness-plugin-blue" alt="DSH Plugin"></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek_Harness-web-orange" alt="DSH Web"></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DSH%20verified-0.1.7--rc.1%20~%200.2.0--rc.1-blue" alt="DSH verified 0.1.7-rc.1 ~ 0.2.0-rc.1"></a>
+</p>
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"></a>
+  <a href="https://github.com/psychiiii/dsh-three-window/releases/latest"><img src="https://img.shields.io/github/v/release/psychiiii/dsh-three-window?label=version&color=9cf" alt="Version"></a>
+</p>
+
 English | [中文](README.zh.md)
 
 A three-window workbench plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`).
