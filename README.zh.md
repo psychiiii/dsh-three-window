@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek_Harness-plugin-blue" alt="DSH Plugin"></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek_Harness-web-orange" alt="DSH Web"></a>
-  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DSH%20verified-0.1.7--rc.1%20~%200.2.0--rc.1-blue" alt="DSH verified 0.1.7-rc.1 ~ 0.2.0-rc.1"></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DSH%20verified-0.1.7--rc.1%20~%200.2.0--rc.2-blue" alt="DSH verified 0.1.7-rc.1 ~ 0.2.0-rc.2"></a>
 </p>
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"></a>

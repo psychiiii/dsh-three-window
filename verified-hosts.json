@@ -14,6 +14,11 @@
       "version": "0.2.0-rc.1",
       "tag": "dsh-v0.2.0-rc.1",
       "commit": "4878cdabd87d4041bdaff61d04c966883b9fd07a"
+    },
+    {
+      "version": "0.2.0-rc.2",
+      "tag": "dsh-v0.2.0-rc.2",
+      "commit": "639ed015397290b3745d163aafe02ffee4aa3f84"
     }
   ]
 }
